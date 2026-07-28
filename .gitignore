@@ -1,0 +1,15 @@
+node_modules/
+dist/
+src-tauri/target/
+src-tauri/gen/schemas/
+website/.next/
+website/out/
+website/node_modules/
+website/tsconfig.tsbuildinfo
+*.log
+.env
+.env.local
+.DS_Store
+Thumbs.db
+website/
+ColdShot_*.png
