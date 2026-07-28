@@ -2,6 +2,12 @@
 
 Fast screenshot tool for Windows built with Tauri 2, React and Tailwind. Inspired by CleanShot X.
 
+## Download
+
+**[Download ColdShot for Windows (.exe)](https://github.com/caprarim/coldshot/releases/latest)**
+
+Run the installer. It installs per user, so no admin prompt. ColdShot then lives in the system tray and the global hotkeys work right away.
+
 ## Features
 
 - Area capture: drag to select, click to grab a whole window, crosshair guides, live size readout
