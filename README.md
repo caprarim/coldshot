@@ -4,9 +4,11 @@ Fast screenshot tool for Windows built with Tauri 2, React and Tailwind. Inspire
 
 ## Download
 
-**[Download ColdShot for Windows (.exe)](https://github.com/caprarim/coldshot/releases/latest)**
+**[Download ColdShot for Windows (.exe)](https://github.com/caprarim/coldshot/releases/latest/download/ColdShot_0.2.1_x64-setup.exe)**
 
-Run the installer. It installs per user, so no admin prompt. ColdShot then lives in the system tray and the global hotkeys work right away.
+All versions are on the [releases page](https://github.com/caprarim/coldshot/releases).
+
+Run the installer. It installs per user, so no admin prompt. The build is unsigned, so SmartScreen may warn: click "More info" then "Run anyway". ColdShot then lives in the system tray and the global hotkeys work right away.
 
 ## Features
 
