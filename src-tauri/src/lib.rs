@@ -34,6 +34,8 @@ pub fn run() {
             capture::open_editor,
             files::get_history,
             files::load_capture,
+            files::load_thumb,
+            files::update_capture,
             files::delete_capture,
             files::reveal_capture,
             files::reveal_path,

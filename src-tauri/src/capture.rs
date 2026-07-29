@@ -249,13 +249,62 @@ fn finalize_frozen(app: &AppHandle, frozen: Frozen, x: f64, y: f64, w: f64, h: f
             }
             take_main_hidden(app);
             let _ = app.emit("capture-saved", id.clone());
-            open_editor_window(app, &id, pw, ph, frozen.scale);
+            open_preview_window(app, &id, frozen.mon_x, frozen.mon_y, frozen.mon_h, frozen.scale);
         }
         Err(e) => {
             eprintln!("store failed: {e}");
             restore_main(app);
         }
     }
+}
+
+const PREVIEW_W: f64 = 276.0;
+const PREVIEW_H: f64 = 208.0;
+const PREVIEW_MARGIN: f64 = 20.0;
+/// Rough room left for the Windows taskbar so the card floats above it.
+const TASKBAR_ALLOWANCE: f64 = 56.0;
+
+/// Drops a small capture card in the bottom-left corner of the monitor that was
+/// captured, so a screenshot never steals focus with a full editor window.
+pub fn open_preview_window(
+    app: &AppHandle,
+    id: &str,
+    mon_x: i32,
+    mon_y: i32,
+    mon_h: u32,
+    scale: f64,
+) {
+    if let Some(w) = app.get_webview_window("preview") {
+        let _ = w.close();
+        std::thread::sleep(std::time::Duration::from_millis(140));
+    }
+    let url = format!("index.html?view=preview&id={id}");
+    let app2 = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        let builder = WebviewWindowBuilder::new(&app2, "preview", WebviewUrl::App(url.into()))
+            .title("ColdShot Preview")
+            .inner_size(PREVIEW_W, PREVIEW_H)
+            .decorations(false)
+            .resizable(false)
+            .maximizable(false)
+            .minimizable(false)
+            .always_on_top(true)
+            .skip_taskbar(true)
+            .transparent(true)
+            .shadow(false)
+            .focused(false)
+            .visible(false);
+        match builder.build() {
+            Ok(w) => {
+                let x = mon_x + (PREVIEW_MARGIN * scale).round() as i32;
+                let y = mon_y + mon_h as i32
+                    - ((PREVIEW_H + PREVIEW_MARGIN + TASKBAR_ALLOWANCE) * scale).round() as i32;
+                let _ = w.set_position(tauri::PhysicalPosition::new(x, y));
+                let _ = w.show();
+            }
+            Err(e) => eprintln!("preview failed: {e}"),
+        }
+    });
 }
 
 pub fn open_editor_window(app: &AppHandle, id: &str, img_w: u32, img_h: u32, scale: f64) {

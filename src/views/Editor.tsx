@@ -642,7 +642,9 @@ export default function Editor({ id }: { id: string }) {
   const doQuickSave = async () => {
     if (!ready) return;
     try {
-      const path = await api.quickSave(exportData(), `ColdShot_${id}.png`);
+      const data = exportData();
+      const path = await api.quickSave(data, `ColdShot_${id}.png`);
+      await api.updateCapture(id, data).catch(() => {});
       setSavedPath(path);
       showToast(`Saved to ${path}`);
     } catch (e) {
@@ -653,8 +655,10 @@ export default function Editor({ id }: { id: string }) {
   const doSaveAs = async () => {
     if (!ready) return;
     try {
-      const path = await api.saveImageAs(exportData(), `ColdShot_${id}.png`);
+      const data = exportData();
+      const path = await api.saveImageAs(data, `ColdShot_${id}.png`);
       if (path) {
+        await api.updateCapture(id, data).catch(() => {});
         setSavedPath(path);
         showToast(`Saved to ${path}`);
       }

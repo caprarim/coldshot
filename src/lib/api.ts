@@ -47,6 +47,9 @@ export const api = {
     invoke<void>("finish_capture", { x, y, w, h }),
   cancelCapture: () => invoke<void>("cancel_capture"),
   loadCapture: (id: string) => invoke<string>("load_capture", { id }),
+  loadThumb: (id: string) => invoke<string>("load_thumb", { id }),
+  updateCapture: (id: string, data: string) =>
+    invoke<void>("update_capture", { id, data }),
   getHistory: () => invoke<HistoryEntry[]>("get_history"),
   deleteCapture: (id: string) => invoke<void>("delete_capture", { id }),
   revealCapture: (id: string) => invoke<void>("reveal_capture", { id }),

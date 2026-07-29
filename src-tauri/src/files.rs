@@ -6,7 +6,7 @@ use serde::Serialize;
 use std::fs;
 use std::io::Cursor;
 use std::path::PathBuf;
-use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_dialog::DialogExt;
 
 pub fn valid_id(id: &str) -> bool {
@@ -60,6 +60,16 @@ fn encode_png(img: &image::RgbaImage) -> Result<Vec<u8>, String> {
     Ok(buf)
 }
 
+fn make_thumb(img: &image::RgbaImage) -> image::RgbaImage {
+    let (w, h) = (img.width(), img.height());
+    if w > 380 {
+        let th = ((h as f64 * 380.0 / w as f64).round() as u32).max(1);
+        image::imageops::resize(img, 380, th, image::imageops::FilterType::Triangle)
+    } else {
+        img.clone()
+    }
+}
+
 pub fn store_capture(app: &AppHandle, img: &image::RgbaImage) -> Result<String, String> {
     let now = chrono::Local::now();
     let id = format!(
@@ -72,13 +82,7 @@ pub fn store_capture(app: &AppHandle, img: &image::RgbaImage) -> Result<String, 
         .map_err(|e| e.to_string())?;
 
     let (w, h) = (img.width(), img.height());
-    let thumb = if w > 380 {
-        let th = ((h as f64 * 380.0 / w as f64).round() as u32).max(1);
-        image::imageops::resize(img, 380, th, image::imageops::FilterType::Triangle)
-    } else {
-        img.clone()
-    };
-    fs::write(dir.join(format!("{id}_thumb.png")), encode_png(&thumb)?)
+    fs::write(dir.join(format!("{id}_thumb.png")), encode_png(&make_thumb(img))?)
         .map_err(|e| e.to_string())?;
 
     let mut items = read_history(app);
@@ -191,6 +195,53 @@ pub async fn load_capture(app: AppHandle, id: String) -> Result<String, String> 
     let path = captures_dir(&app)?.join(format!("{id}.png"));
     let bytes = fs::read(path).map_err(|e| e.to_string())?;
     Ok(format!("data:image/png;base64,{}", STANDARD.encode(bytes)))
+}
+
+#[tauri::command]
+pub async fn load_thumb(app: AppHandle, id: String) -> Result<String, String> {
+    if !valid_id(&id) {
+        return Err("Invalid id".into());
+    }
+    let path = captures_dir(&app)?.join(format!("{id}_thumb.png"));
+    let bytes = fs::read(path).map_err(|e| e.to_string())?;
+    Ok(format!("data:image/png;base64,{}", STANDARD.encode(bytes)))
+}
+
+#[tauri::command]
+pub async fn update_capture(app: AppHandle, id: String, data: String) -> Result<(), String> {
+    if !valid_id(&id) {
+        return Err("Invalid id".into());
+    }
+    let dir = captures_dir(&app)?;
+    let path = dir.join(format!("{id}.png"));
+    if !path.exists() {
+        return Ok(());
+    }
+    let bytes = decode_data_url(&data)?;
+    let img = image::load_from_memory(&bytes)
+        .map_err(|e| e.to_string())?
+        .to_rgba8();
+    fs::write(&path, &bytes).map_err(|e| e.to_string())?;
+    fs::write(
+        dir.join(format!("{id}_thumb.png")),
+        encode_png(&make_thumb(&img))?,
+    )
+    .map_err(|e| e.to_string())?;
+
+    let mut items = read_history(&app);
+    let mut changed = false;
+    for item in items.iter_mut() {
+        if item.id == id {
+            item.width = img.width();
+            item.height = img.height();
+            changed = true;
+        }
+    }
+    if changed {
+        write_history(&app, &items)?;
+    }
+    let _ = app.emit("capture-saved", id);
+    Ok(())
 }
 
 #[tauri::command]
