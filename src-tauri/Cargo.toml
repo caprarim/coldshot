@@ -1,6 +1,6 @@
 [package]
 name = "coldshot"
-version = "0.3.0"
+version = "0.3.1"
 description = "Fast screenshot capture, annotation and sharing for Windows"
 authors = ["Rim"]
 edition = "2021"

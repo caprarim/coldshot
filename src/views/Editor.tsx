@@ -741,110 +741,122 @@ export default function Editor({ id }: { id: string }) {
 
   return (
     <div className="flex h-full flex-col bg-zinc-950 text-zinc-200">
-      <div className="flex items-center gap-1 border-b border-zinc-800 bg-zinc-900 px-3 py-2">
-        {tools.map(({ t, icon, label }) => (
+      <div className="flex flex-wrap items-center gap-x-1 gap-y-1.5 border-b border-zinc-800 bg-zinc-900 px-3 py-2">
+        <div className="flex shrink-0 items-center gap-1">
+          {tools.map(({ t, icon, label }) => (
+            <button
+              key={t}
+              title={label}
+              onClick={() => {
+                setTool(t);
+                setSelected(null);
+              }}
+              className={`shrink-0 rounded-md p-2 transition-colors ${
+                tool === t
+                  ? "bg-cyan-600 text-white"
+                  : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+              }`}
+            >
+              {icon}
+            </button>
+          ))}
+        </div>
+
+        <div className="mx-1.5 h-6 w-px shrink-0 bg-zinc-700" />
+
+        <div className="flex shrink-0 items-center gap-1">
+          {COLORS.map((c) => (
+            <button
+              key={c}
+              onClick={() => setColor(c)}
+              className={`h-5 w-5 shrink-0 rounded-full border-2 ${
+                color === c ? "border-cyan-400 scale-110" : "border-zinc-600"
+              }`}
+              style={{ background: c }}
+            />
+          ))}
+          <input
+            type="range"
+            min={1}
+            max={12}
+            value={size}
+            onChange={(e) => setSize(Number(e.target.value))}
+            className="ml-2 w-20 shrink-0 accent-cyan-500"
+            title="Size"
+          />
+        </div>
+
+        <div className="mx-1.5 h-6 w-px shrink-0 bg-zinc-700" />
+
+        <div className="flex shrink-0 items-center gap-1">
           <button
-            key={t}
-            title={label}
-            onClick={() => {
-              setTool(t);
-              setSelected(null);
-            }}
-            className={`rounded-md p-2 transition-colors ${
-              tool === t
-                ? "bg-cyan-600 text-white"
+            title="Undo"
+            onClick={undo}
+            className="rounded-md p-2 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+          >
+            <Undo2 size={17} />
+          </button>
+          <button
+            title="Redo"
+            onClick={redo}
+            className="rounded-md p-2 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+          >
+            <Redo2 size={17} />
+          </button>
+          <button
+            title="Delete selected"
+            onClick={deleteSelected}
+            className="rounded-md p-2 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+          >
+            <Trash2 size={17} />
+          </button>
+        </div>
+
+        <div className="ml-auto flex shrink-0 items-center gap-1">
+          <button
+            title="Beautify"
+            onClick={() => setBeautify(!beautify)}
+            className={`rounded-md p-2 ${
+              beautify
+                ? "bg-fuchsia-600 text-white"
                 : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
             }`}
           >
-            {icon}
+            <Sparkles size={17} />
           </button>
-        ))}
-        <div className="mx-2 h-6 w-px bg-zinc-700" />
-        {COLORS.map((c) => (
+          <div className="mx-1 h-6 w-px shrink-0 bg-zinc-700" />
           <button
-            key={c}
-            onClick={() => setColor(c)}
-            className={`h-5 w-5 rounded-full border-2 ${
-              color === c ? "border-cyan-400 scale-110" : "border-zinc-600"
-            }`}
-            style={{ background: c }}
-          />
-        ))}
-        <input
-          type="range"
-          min={1}
-          max={12}
-          value={size}
-          onChange={(e) => setSize(Number(e.target.value))}
-          className="ml-2 w-20 accent-cyan-500"
-          title="Size"
-        />
-        <div className="mx-2 h-6 w-px bg-zinc-700" />
-        <button
-          title="Undo"
-          onClick={undo}
-          className="rounded-md p-2 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
-        >
-          <Undo2 size={17} />
-        </button>
-        <button
-          title="Redo"
-          onClick={redo}
-          className="rounded-md p-2 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
-        >
-          <Redo2 size={17} />
-        </button>
-        <button
-          title="Delete selected"
-          onClick={deleteSelected}
-          className="rounded-md p-2 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
-        >
-          <Trash2 size={17} />
-        </button>
-        <div className="flex-1" />
-        <button
-          title="Beautify"
-          onClick={() => setBeautify(!beautify)}
-          className={`rounded-md p-2 ${
-            beautify
-              ? "bg-fuchsia-600 text-white"
-              : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
-          }`}
-        >
-          <Sparkles size={17} />
-        </button>
-        <div className="mx-2 h-6 w-px bg-zinc-700" />
-        <button
-          title="Pin to screen"
-          onClick={doPin}
-          className="rounded-md p-2 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
-        >
-          <Pin size={17} />
-        </button>
-        <button
-          title="Copy (Ctrl+C)"
-          onClick={doCopy}
-          className="rounded-md p-2 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
-        >
-          <Copy size={17} />
-        </button>
-        <button
-          title="Quick save (Ctrl+S)"
-          onClick={doQuickSave}
-          className="rounded-md p-2 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
-        >
-          <Save size={17} />
-        </button>
-        <button
-          onClick={doSaveAs}
-          className="ml-1 flex items-center gap-1.5 rounded-md bg-cyan-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-cyan-500"
-        >
-          <Download size={15} />
-          Save As
-        </button>
+            title="Pin to screen"
+            onClick={doPin}
+            className="rounded-md p-2 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+          >
+            <Pin size={17} />
+          </button>
+          <button
+            title="Copy (Ctrl+C)"
+            onClick={doCopy}
+            className="rounded-md p-2 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+          >
+            <Copy size={17} />
+          </button>
+          <button
+            title="Quick save (Ctrl+S)"
+            onClick={doQuickSave}
+            className="rounded-md p-2 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+          >
+            <Save size={17} />
+          </button>
+          <button
+            onClick={doSaveAs}
+            className="ml-1 flex items-center gap-1.5 rounded-md bg-cyan-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-cyan-500"
+          >
+            <Download size={15} />
+            Save As
+          </button>
+        </div>
       </div>
       <div className="flex min-h-0 flex-1">
-        <div className="relative flex min-w-0 flex-1 items-center justify-center overflow-hidden bg-zinc-950 p-4">
+        <div className="relative flex min-w-0 flex-1 items-center justify-center overflow-hidden bg-zinc-950 p-2 sm:p-4">
           <div
             ref={wrapRef}
             className="relative flex max-h-full max-w-full items-center justify-center"
@@ -932,7 +944,7 @@ export default function Editor({ id }: { id: string }) {
           )}
         </div>
         {beautify && (
-          <div className="w-56 shrink-0 space-y-4 overflow-y-auto border-l border-zinc-800 bg-zinc-900 p-4">
+          <div className="w-44 shrink-0 space-y-4 overflow-y-auto border-l border-zinc-800 bg-zinc-900 p-3 sm:w-56 sm:p-4">
             <div>
               <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">
                 Background

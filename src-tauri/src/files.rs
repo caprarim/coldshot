@@ -397,6 +397,18 @@ pub fn get_pin_image(app: AppHandle, pid: String) -> Result<String, String> {
     Ok(format!("data:image/png;base64,{}", STANDARD.encode(bytes)))
 }
 
+/// Brings the main window up and asks the UI to land on the History tab.
+#[tauri::command]
+pub fn open_history(app: AppHandle) -> Result<(), String> {
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.show();
+        let _ = w.unminimize();
+        let _ = w.set_focus();
+    }
+    let _ = app.emit("show-history", ());
+    Ok(())
+}
+
 #[tauri::command]
 pub fn close_window(app: AppHandle, label: String) -> Result<(), String> {
     if let Some(w) = app.get_webview_window(&label) {

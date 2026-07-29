@@ -74,6 +74,16 @@ export default function MainWindow() {
   }, []);
 
   useEffect(() => {
+    const un = listen("show-history", () => {
+      setTab("history");
+      loadHistory();
+    });
+    return () => {
+      un.then((f) => f());
+    };
+  }, []);
+
+  useEffect(() => {
     const un = listen<[number, number]>("update-progress", (e) =>
       setProgress({ received: e.payload[0], total: e.payload[1] })
     );
@@ -198,36 +208,38 @@ export default function MainWindow() {
 
   return (
     <div className="flex h-full flex-col bg-zinc-950 text-zinc-200">
-      <div className="flex items-center gap-2 border-b border-zinc-800 bg-zinc-900 px-4 py-3">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 font-bold text-white">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 border-b border-zinc-800 bg-zinc-900 px-4 py-3">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 font-bold text-white">
           <Camera size={17} />
         </div>
-        <div className="text-lg font-semibold text-white">ColdShot</div>
-        <div className="flex-1" />
-        {(
-          [
-            ["capture", <Camera size={15} key="c" />, "Capture"],
-            ["history", <History size={15} key="h" />, "History"],
-            ["settings", <SettingsIcon size={15} key="s" />, "Settings"],
-            ["update", <Download size={15} key="u" />, "Update"],
-          ] as [Tab, React.ReactNode, string][]
-        ).map(([t, icon, label]) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`relative flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm ${
-              tab === t
-                ? "bg-cyan-600 text-white"
-                : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
-            }`}
-          >
-            {icon}
-            {label}
-            {t === "update" && update?.update_available && (
-              <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-cyan-400" />
-            )}
-          </button>
-        ))}
+        <div className="shrink-0 text-lg font-semibold text-white">ColdShot</div>
+        <div className="ml-auto flex shrink-0 items-center gap-1">
+          {(
+            [
+              ["capture", <Camera size={15} key="c" />, "Capture"],
+              ["history", <History size={15} key="h" />, "History"],
+              ["settings", <SettingsIcon size={15} key="s" />, "Settings"],
+              ["update", <Download size={15} key="u" />, "Update"],
+            ] as [Tab, React.ReactNode, string][]
+          ).map(([t, icon, label]) => (
+            <button
+              key={t}
+              title={label}
+              onClick={() => setTab(t)}
+              className={`relative flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm sm:px-3 ${
+                tab === t
+                  ? "bg-cyan-600 text-white"
+                  : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+              }`}
+            >
+              {icon}
+              <span className="hidden sm:inline">{label}</span>
+              {t === "update" && update?.update_available && (
+                <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-cyan-400" />
+              )}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="relative min-h-0 flex-1 overflow-y-auto p-5">
@@ -420,14 +432,19 @@ export default function MainWindow() {
                   ["hotkey_full", "Capture full screen"],
                 ] as [keyof Settings, string][]
               ).map(([key, label]) => (
-                <div key={key} className="flex items-center gap-3">
-                  <div className="w-40 text-sm text-zinc-400">{label}</div>
+                <div
+                  key={key}
+                  className="flex flex-wrap items-center gap-x-3 gap-y-1"
+                >
+                  <div className="w-40 shrink-0 text-sm text-zinc-400">
+                    {label}
+                  </div>
                   <input
                     value={settings[key] as string}
                     onChange={(e) =>
                       setSettings({ ...settings, [key]: e.target.value })
                     }
-                    className="flex-1 rounded-md border border-zinc-700 bg-zinc-950 px-3 py-1.5 font-mono text-sm text-zinc-200 outline-none focus:border-cyan-500"
+                    className="min-w-[9rem] flex-1 rounded-md border border-zinc-700 bg-zinc-950 px-3 py-1.5 font-mono text-sm text-zinc-200 outline-none focus:border-cyan-500"
                   />
                 </div>
               ))}

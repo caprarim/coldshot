@@ -62,6 +62,7 @@ export const api = {
     invoke<string>("quick_save", { data, name }),
   pinImage: (data: string) => invoke<void>("pin_image", { data }),
   getPinImage: (pid: string) => invoke<string>("get_pin_image", { pid }),
+  openHistory: () => invoke<void>("open_history"),
   closeWindow: (label: string) => invoke<void>("close_window", { label }),
   resizeWindow: (label: string, w: number, h: number) =>
     invoke<void>("resize_window", { label, w, h }),

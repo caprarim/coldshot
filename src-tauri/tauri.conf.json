@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "ColdShot",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "identifier": "com.coldwork.coldshot",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -16,8 +16,8 @@
         "title": "ColdShot",
         "width": 860,
         "height": 620,
-        "minWidth": 640,
-        "minHeight": 480,
+        "minWidth": 460,
+        "minHeight": 420,
         "center": true
       }
     ],

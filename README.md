@@ -4,7 +4,7 @@ Fast screenshot tool for Windows built with Tauri 2, React and Tailwind. Inspire
 
 ## Download
 
-**[Download ColdShot for Windows (.exe)](https://github.com/caprarim/coldshot/releases/latest/download/ColdShot_0.3.0_x64-setup.exe)**
+**[Download ColdShot for Windows (.exe)](https://github.com/caprarim/coldshot/releases/latest/download/ColdShot_0.3.1_x64-setup.exe)**
 
 All versions are on the [releases page](https://github.com/caprarim/coldshot/releases).
 
@@ -14,7 +14,7 @@ Run the installer. It installs per user, so no admin prompt. The build is unsign
 
 - Area capture: drag to select, click to grab a whole window, crosshair guides, live size readout
 - Window capture and full screen capture
-- Capture preview card: after every shot a small thumbnail slides into the bottom left corner with Full screen and Copy buttons, and fades out on its own after 5 seconds
+- Capture preview card: after every shot a small thumbnail slides into the bottom left corner with Full screen, Copy and Open history buttons, and fades out on its own after 5 seconds
 - Self timer (3, 5, 10 seconds)
 - Annotation editor: pen (selected by default), highlighter, line, arrow, rectangle, ellipse, text, pixelate, numbered counter badges, crop, undo/redo, color and size controls
 - Beautify: gradient backgrounds, padding, rounded corners, drop shadow
@@ -31,8 +31,8 @@ The Update tab reads `https://coldworkapp.com/downloads/coldshot-latest.json`:
 
 ```json
 {
-  "version": "0.3.0",
-  "url": "https://coldworkapp.com/downloads/ColdShot_0.3.0_x64-setup.exe",
+  "version": "0.3.1",
+  "url": "https://coldworkapp.com/downloads/ColdShot_0.3.1_x64-setup.exe",
   "notes": "What changed in this release"
 }
 ```

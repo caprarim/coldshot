@@ -45,6 +45,7 @@ pub fn run() {
             files::pick_folder,
             files::pin_image,
             files::get_pin_image,
+            files::open_history,
             files::close_window,
             files::resize_window,
             settings::get_settings,

@@ -259,7 +259,7 @@ fn finalize_frozen(app: &AppHandle, frozen: Frozen, x: f64, y: f64, w: f64, h: f
 }
 
 const PREVIEW_W: f64 = 276.0;
-const PREVIEW_H: f64 = 208.0;
+const PREVIEW_H: f64 = 250.0;
 const PREVIEW_MARGIN: f64 = 20.0;
 /// Rough room left for the Windows taskbar so the card floats above it.
 const TASKBAR_ALLOWANCE: f64 = 56.0;
@@ -327,16 +327,16 @@ pub fn open_editor_window(app: &AppHandle, id: &str, img_w: u32, img_h: u32, sca
         })
         .unwrap_or((1600.0, 900.0));
     let lw = (img_w as f64 / scale + 48.0)
-        .clamp(760.0, mon_w * 0.92);
+        .clamp(640.0, mon_w * 0.92);
     let lh = (img_h as f64 / scale + 140.0)
-        .clamp(520.0, mon_h * 0.92);
+        .clamp(480.0, mon_h * 0.92);
     let url = format!("index.html?view=editor&id={id}");
     let app2 = app.clone();
     let _ = app.run_on_main_thread(move || {
         let _ = WebviewWindowBuilder::new(&app2, &label, WebviewUrl::App(url.into()))
             .title("ColdShot Editor")
             .inner_size(lw, lh)
-            .min_inner_size(760.0, 520.0)
+            .min_inner_size(460.0, 400.0)
             .center()
             .build();
     });

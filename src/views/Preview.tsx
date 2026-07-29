@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Copy, Maximize2, X, Check } from "lucide-react";
+import { Copy, Maximize2, X, Check, History } from "lucide-react";
 import { api } from "../lib/api";
 
 const DISMISS_MS = 5000;
@@ -50,6 +50,16 @@ export default function Preview({ id }: { id: string }) {
       await api.openEditor(id);
     } catch {
       /* editor failed to open; still dismiss the card */
+    }
+    close();
+  };
+
+  const openHistory = async () => {
+    holdRef.current = true;
+    try {
+      await api.openHistory();
+    } catch {
+      /* main window missing; still dismiss the card */
     }
     close();
   };
@@ -125,6 +135,17 @@ export default function Preview({ id }: { id: string }) {
         >
           {copied ? <Check size={13} /> : <Copy size={13} />}
           {copied ? "Copied" : "Copy"}
+        </button>
+      </div>
+
+      <div className="px-3 pb-2.5">
+        <button
+          onClick={openHistory}
+          title="Open ColdShot and browse every capture"
+          className="flex w-full items-center justify-center gap-1.5 rounded-md bg-zinc-800/70 px-2 py-1.5 text-xs font-medium text-zinc-300 hover:bg-zinc-700 hover:text-zinc-100"
+        >
+          <History size={13} />
+          Open history
         </button>
       </div>
 
