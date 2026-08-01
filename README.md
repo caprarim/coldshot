@@ -18,7 +18,8 @@ Run the installer. It installs per user, so no admin prompt. The build is unsign
 
 ### Ubuntu
 
-Built and tested on Ubuntu 22.04, and the same package runs on 24.04. Install the .deb with apt so dependencies come along:
+Built on Ubuntu 24.04 LTS, so it needs Ubuntu 24.04 or newer. The screen capture backend binds to
+PipeWire 1.0, which 22.04 does not ship. Install the .deb with apt so dependencies come along:
 
 ```
 sudo apt install ./ColdShot_0.4.0_amd64.deb
@@ -96,7 +97,7 @@ On Windows this produces `ColdShot.exe` plus a per-user NSIS installer. On Linux
 `src-tauri/tauri.windows.conf.json` and `src-tauri/tauri.linux.conf.json`, which Tauri merges over
 `tauri.conf.json` per platform.
 
-Build dependencies on Ubuntu 22.04:
+Build dependencies on Ubuntu 24.04:
 
 ```
 sudo apt install build-essential curl wget file pkg-config cmake \
