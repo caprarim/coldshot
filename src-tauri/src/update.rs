@@ -2,20 +2,51 @@ use crate::state::AppState;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::fs;
-use std::os::windows::process::CommandExt;
 use std::path::PathBuf;
 use std::process::Command;
 use tauri::{AppHandle, Emitter, Manager};
 
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
+#[cfg(target_os = "linux")]
+use std::path::Path;
+#[cfg(target_os = "linux")]
+use std::process::Stdio;
+
 const LATEST_URL: &str = "https://coldworkapp.com/downloads/coldshot-latest.json";
+
+#[cfg(windows)]
 const FALLBACK_URL: &str = "https://coldworkapp.com/api/download?platform=coldshot-windows";
+#[cfg(target_os = "linux")]
+const FALLBACK_URL: &str = "https://coldworkapp.com/api/download?platform=coldshot-linux";
+
+#[cfg(windows)]
 const DETACHED_NO_WINDOW: u32 = 0x0800_0008;
 
 #[derive(Deserialize)]
 struct Latest {
     version: String,
+    #[serde(default)]
+    #[allow(dead_code)]
     url: Option<String>,
+    #[serde(default)]
+    #[allow(dead_code)]
+    linux_url: Option<String>,
+    #[serde(default)]
     notes: Option<String>,
+}
+
+impl Latest {
+    fn platform_url(&self) -> Option<String> {
+        #[cfg(windows)]
+        {
+            self.url.clone()
+        }
+        #[cfg(target_os = "linux")]
+        {
+            self.linux_url.clone()
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -82,12 +113,33 @@ async fn fetch_latest() -> Result<Latest, String> {
     Ok(latest)
 }
 
-fn installer_path(app: &AppHandle) -> Result<PathBuf, String> {
+fn artifact_name(url: &str) -> &'static str {
+    #[cfg(windows)]
+    {
+        let _ = url;
+        "ColdShot-Update-Setup.exe"
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let clean = url
+            .split(['?', '#'])
+            .next()
+            .unwrap_or(url)
+            .to_ascii_lowercase();
+        if clean.ends_with(".deb") {
+            "ColdShot-Update.deb"
+        } else {
+            "ColdShot-Update.AppImage"
+        }
+    }
+}
+
+fn installer_path(app: &AppHandle, url: &str) -> Result<PathBuf, String> {
     Ok(app
         .path()
         .temp_dir()
         .map_err(|e| e.to_string())?
-        .join("ColdShot-Update-Setup.exe"))
+        .join(artifact_name(url)))
 }
 
 #[tauri::command]
@@ -133,8 +185,11 @@ pub async fn update_download(app: AppHandle) -> Result<(), String> {
 
 async fn download_inner(app: &AppHandle) -> Result<(), String> {
     let latest = fetch_latest().await?;
-    let url = latest.url.filter(|u| u.starts_with("https://")).unwrap_or_else(|| FALLBACK_URL.into());
-    let dest = installer_path(app)?;
+    let url = latest
+        .platform_url()
+        .filter(|u| u.starts_with("https://"))
+        .unwrap_or_else(|| FALLBACK_URL.into());
+    let dest = installer_path(app, &url)?;
     let mut res = reqwest::Client::builder()
         .user_agent("ColdShot")
         .build()
@@ -167,20 +222,33 @@ async fn download_inner(app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-fn ps_quote(s: &str) -> String {
-    s.replace('\'', "''")
-}
-
-#[tauri::command]
-pub fn update_install(app: AppHandle) -> Result<(), String> {
-    let setup = {
+fn downloaded_artifact(app: &AppHandle) -> Result<PathBuf, String> {
+    {
         let state = app.state::<AppState>();
         let guard = state.update_file.lock().unwrap();
         guard.clone()
     }
     .filter(|p| p.exists())
-    .ok_or_else(|| "Download the update first.".to_string())?;
+    .ok_or_else(|| "Download the update first.".to_string())
+}
 
+fn quit_after_handoff(app: &AppHandle) {
+    let handle = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(400));
+        handle.exit(0);
+    });
+}
+
+#[cfg(windows)]
+fn ps_quote(s: &str) -> String {
+    s.replace('\'', "''")
+}
+
+#[cfg(windows)]
+#[tauri::command]
+pub fn update_install(app: AppHandle) -> Result<(), String> {
+    let setup = downloaded_artifact(&app)?;
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
     let script = app
         .path()
@@ -216,10 +284,105 @@ pub fn update_install(app: AppHandle) -> Result<(), String> {
         .spawn()
         .map_err(|e| e.to_string())?;
 
-    let handle = app.clone();
-    std::thread::spawn(move || {
-        std::thread::sleep(std::time::Duration::from_millis(400));
-        handle.exit(0);
-    });
+    quit_after_handoff(&app);
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn sh_quote(s: &str) -> String {
+    s.replace('\'', "'\\''")
+}
+
+#[cfg(target_os = "linux")]
+fn writable(path: &Path) -> bool {
+    fs::OpenOptions::new().append(true).open(path).is_ok()
+}
+
+#[cfg(target_os = "linux")]
+fn self_update_target() -> Option<PathBuf> {
+    if let Some(img) = std::env::var_os("APPIMAGE") {
+        let p = PathBuf::from(img);
+        return if writable(&p) { Some(p) } else { None };
+    }
+    let exe = std::env::current_exe().ok()?;
+    if writable(&exe) {
+        Some(exe)
+    } else {
+        None
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn spawn_detached(script: &Path) -> Result<(), String> {
+    Command::new("sh")
+        .arg("-c")
+        .arg(format!(
+            "nohup sh '{}' >/dev/null 2>&1 &",
+            sh_quote(&script.display().to_string())
+        ))
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
+#[cfg(target_os = "linux")]
+#[tauri::command]
+pub fn update_install(app: AppHandle) -> Result<(), String> {
+    let artifact = downloaded_artifact(&app)?;
+    let is_appimage = artifact
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.eq_ignore_ascii_case("appimage"))
+        .unwrap_or(false);
+
+    let target = if is_appimage { self_update_target() } else { None };
+
+    let Some(target) = target else {
+        Command::new("xdg-open")
+            .arg(&artifact)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .map_err(|_| {
+                format!(
+                    "Could not open the package. Install it yourself from {}",
+                    artifact.display()
+                )
+            })?;
+        return Ok(());
+    };
+
+    let script = app
+        .path()
+        .temp_dir()
+        .map_err(|e| e.to_string())?
+        .join("coldshot-apply-update.sh");
+    let body = [
+        "#!/bin/sh".to_string(),
+        format!("WAIT_PID={}", std::process::id()),
+        format!("SRC='{}'", sh_quote(&artifact.display().to_string())),
+        format!("DST='{}'", sh_quote(&target.display().to_string())),
+        format!("SELF='{}'", sh_quote(&script.display().to_string())),
+        "i=0".into(),
+        "while kill -0 \"$WAIT_PID\" 2>/dev/null && [ \"$i\" -lt 150 ]; do".into(),
+        "  sleep 0.2".into(),
+        "  i=$((i+1))".into(),
+        "done".into(),
+        "sleep 1".into(),
+        "cp -f \"$SRC\" \"$DST\" || exit 1".into(),
+        "chmod 755 \"$DST\"".into(),
+        "rm -f \"$SRC\"".into(),
+        "(setsid \"$DST\" >/dev/null 2>&1 &) || \"$DST\" >/dev/null 2>&1 &".into(),
+        "rm -f \"$SELF\"".into(),
+    ]
+    .join("\n");
+    fs::write(&script, body).map_err(|e| e.to_string())?;
+
+    spawn_detached(&script)?;
+    quit_after_handoff(&app);
     Ok(())
 }

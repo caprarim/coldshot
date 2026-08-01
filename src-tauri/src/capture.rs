@@ -80,13 +80,51 @@ pub fn begin(app: AppHandle, mode: &str, delay_ms: u64) {
     });
 }
 
+#[cfg(windows)]
+fn is_shell_window(title: &str) -> bool {
+    title == "Program Manager"
+}
+
+#[cfg(target_os = "linux")]
+fn is_shell_window(title: &str) -> bool {
+    matches!(
+        title,
+        "Desktop"
+            | "desktop_window"
+            | "gnome-shell"
+            | "xfdesktop"
+            | "Plasma"
+            | "plasmashell"
+            | "Docky"
+            | "plank"
+    )
+}
+
+/// Wayland and some multi head setups refuse a point lookup, so fall back to
+/// the primary monitor instead of failing the whole capture.
+fn monitor_at(x: i32, y: i32) -> Result<xcap::Monitor, String> {
+    if let Ok(m) = xcap::Monitor::from_point(x, y) {
+        return Ok(m);
+    }
+    let all = xcap::Monitor::all().map_err(|e| e.to_string())?;
+    let mut fallback = None;
+    for m in all {
+        if m.is_primary().unwrap_or(false) {
+            return Ok(m);
+        }
+        if fallback.is_none() {
+            fallback = Some(m);
+        }
+    }
+    fallback.ok_or_else(|| "No monitor available to capture.".to_string())
+}
+
 fn freeze(app: &AppHandle, mode: &str) -> Result<(), String> {
     let pos = app
         .cursor_position()
         .map(|p| (p.x as i32, p.y as i32))
         .unwrap_or((0, 0));
-    let monitor =
-        xcap::Monitor::from_point(pos.0, pos.1).map_err(|e| e.to_string())?;
+    let monitor = monitor_at(pos.0, pos.1)?;
     let img = monitor.capture_image().map_err(|e| e.to_string())?;
     let scale = monitor
         .scale_factor()
@@ -109,7 +147,7 @@ fn freeze(app: &AppHandle, mode: &str) -> Result<(), String> {
                 }
                 let minimized = w.is_minimized().unwrap_or(true);
                 let title = w.title().unwrap_or_default();
-                if minimized || title.is_empty() || title == "Program Manager" {
+                if minimized || title.is_empty() || is_shell_window(&title) {
                     continue;
                 }
                 let wx = w.x().unwrap_or(0);
