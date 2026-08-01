@@ -104,7 +104,7 @@ sudo apt install build-essential curl wget file pkg-config cmake \
   libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev patchelf \
   libayatana-appindicator3-dev \
   libxcb1-dev libxcb-randr0-dev libxcb-shm0-dev libxcb-xfixes0-dev \
-  libdbus-1-dev libpipewire-0.3-dev clang libclang-dev
+  libdbus-1-dev libpipewire-0.3-dev libgbm-dev libdrm-dev clang libclang-dev
 ```
 
 Releases are built by `.github/workflows/release.yml`, which runs the Ubuntu and Windows bundles on

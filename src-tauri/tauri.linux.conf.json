@@ -10,6 +10,7 @@
           "libgtk-3-0",
           "libayatana-appindicator3-1",
           "libpipewire-0.3-0",
+          "libgbm1",
           "libxcb1",
           "libxcb-randr0",
           "libxcb-shm0"

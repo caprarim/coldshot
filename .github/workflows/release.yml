@@ -50,6 +50,7 @@ jobs:
             libxcb1-dev libxcb-randr0-dev libxcb-shm0-dev libxcb-xfixes0-dev \
             libdbus-1-dev \
             libpipewire-0.3-dev \
+            libgbm-dev libdrm-dev \
             clang libclang-dev
 
       - run: npm ci
