@@ -102,7 +102,7 @@ jobs:
         run: |
           set -euo pipefail
           export DEBIAN_FRONTEND=noninteractive
-          apt-get install -y xvfb dbus-x11 x11-utils x11-xserver-utils xdotool imagemagick desktop-file-utils
+          apt-get install -y xvfb dbus-x11 x11-utils x11-xserver-utils xdotool imagemagick feh desktop-file-utils
           desktop-file-validate /usr/share/applications/ColdShot.desktop
           bash "$GITHUB_WORKSPACE/.github/scripts/launch-check.sh"
 
@@ -129,7 +129,7 @@ jobs:
           set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y "/tmp/deb/${{ needs.fetch.outputs.deb }}"
-          sudo apt-get install -y xvfb dbus-x11 x11-utils x11-xserver-utils xdotool imagemagick desktop-file-utils
+          sudo apt-get install -y xvfb dbus-x11 x11-utils x11-xserver-utils xdotool imagemagick feh desktop-file-utils
           dpkg -s cold-shot
 
       - name: Validate desktop entry

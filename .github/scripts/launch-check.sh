@@ -166,17 +166,28 @@ build_scene() {
     -fill white -pointsize 46 -annotate +80+470 'ColdShot on Ubuntu 24.04' \
     -fill '#9fb6d9' -pointsize 26 -annotate +80+520 "$(date -u '+%Y-%m-%d %H:%M:%S UTC')" \
     "$OUT/scene.png" 2>/dev/null
-  if ! display -window root "$OUT/scene.png" 2>/dev/null; then
-    echo "could not paint the scene, falling back to a solid root"
+  feh --bg-scale "$OUT/scene.png" 2>/dev/null ||
+    display -window root "$OUT/scene.png" 2>/dev/null ||
     xsetroot -solid '#2f6fd0'
-    convert -size 1280x800 xc:'#2f6fd0' "$OUT/scene.png"
-  fi
   sleep 2
+
+  # A silent fallback here would leave every later comparison passing against
+  # nothing, so confirm the scene really is on screen before trusting it.
+  import -window root "$OUT/scene-onscreen.png" 2>/dev/null
+  local drift
+  drift=$(rmse_against "$OUT/scene.png" "$OUT/scene-onscreen.png")
+  echo "scene painted on the root, difference from the source = ${drift:-unmeasurable}"
+  if [ -z "$drift" ] || awk "BEGIN{exit !($drift > 0.05)}"; then
+    echo "the reference scene is not actually on screen, so captures cannot be verified"
+    return 1
+  fi
 }
 
+# Each capture also writes a _thumb.png alongside it, and the thumbnail lands
+# last, so it wins a plain sort by mtime. Skip it.
 newest_since() {
-  find "$DATA_DIR/captures" -name '*.png' -newer "$1" -printf '%T@ %p\n' 2>/dev/null |
-    sort -rn | head -1 | cut -d' ' -f2-
+  find "$DATA_DIR/captures" -name '*.png' ! -name '*_thumb.png' -newer "$1" \
+    -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-
 }
 
 wait_for_capture() {
