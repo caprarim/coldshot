@@ -140,6 +140,10 @@ check_capture() {
   local mode="$1"
   echo
   echo "--- full screen capture via Ctrl+Shift+3 ---"
+  # The app hides its own window before grabbing, so on an empty Xvfb a broken
+  # grab and a correct one both look black. Paint the root a known colour and
+  # the captured pixels become proof either way.
+  xsetroot -solid '#2f6fd0'
   xdotool key --clearmodifiers ctrl+shift+3
   local shot=""
   for _ in $(seq 1 20); do
@@ -155,6 +159,16 @@ check_capture() {
   echo "CAPTURE: wrote $shot"
   identify "$shot" || true
   cp "$shot" "$OUT/capture-$mode.png"
+
+  local blue red
+  blue=$(identify -format '%[fx:mean.b]' "$shot" 2>/dev/null)
+  red=$(identify -format '%[fx:mean.r]' "$shot" 2>/dev/null)
+  echo "CAPTURE: mean red=$red blue=$blue (expecting the #2f6fd0 root, so blue high and red low)"
+  if [ -z "$blue" ] || awk "BEGIN{exit !($blue < 0.5)}"; then
+    echo "CAPTURE: the image does not contain the screen contents, so the grab returned blank pixels"
+    return 1
+  fi
+  echo "CAPTURE: the captured pixels match what was on screen"
   if [ -f "$DATA_DIR/history.json" ]; then
     echo "history.json:"
     cat "$DATA_DIR/history.json"
