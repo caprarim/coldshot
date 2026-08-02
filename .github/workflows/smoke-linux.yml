@@ -103,9 +103,8 @@ jobs:
           set -euo pipefail
           export DEBIAN_FRONTEND=noninteractive
           apt-get install -y xvfb dbus-x11 x11-utils x11-xserver-utils xdotool imagemagick desktop-file-utils
-          desktop-file-validate /usr/share/applications/ColdShot.desktop || true
-          bash "$GITHUB_WORKSPACE/.github/scripts/launch-check.sh" || true
-        continue-on-error: true
+          desktop-file-validate /usr/share/applications/ColdShot.desktop
+          bash "$GITHUB_WORKSPACE/.github/scripts/launch-check.sh"
 
       - name: Remove cleanly
         run: |
@@ -134,7 +133,7 @@ jobs:
           dpkg -s cold-shot
 
       - name: Validate desktop entry
-        run: desktop-file-validate /usr/share/applications/ColdShot.desktop || true
+        run: desktop-file-validate /usr/share/applications/ColdShot.desktop
 
       - name: Launch and check the window appears
         run: bash .github/scripts/launch-check.sh
