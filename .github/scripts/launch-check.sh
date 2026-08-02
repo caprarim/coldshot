@@ -115,6 +115,7 @@ attempt() {
   fi
 
   if [ "$ok" = 1 ]; then
+    walk_tabs "$mode"
     if check_capture "$mode"; then
       CAPTURE_OK=1
     else
@@ -132,6 +133,26 @@ attempt() {
   sleep 2
 
   [ "$ok" = 1 ]
+}
+
+# The window is 860x620 centred on a 1280x800 root, so the header tabs sit at
+# fixed coordinates. Click each one and keep the frame for inspection.
+walk_tabs() {
+  local mode="$1"
+  echo
+  echo "--- header tabs ---"
+  local tabs="History:801 Settings:903 Update:1006"
+  for entry in $tabs; do
+    local name="${entry%%:*}"
+    local x="${entry##*:}"
+    xdotool mousemove "$x" 118 click 1
+    # Update fires a network call, so give it room to come back.
+    if [ "$name" = Update ]; then sleep 8; else sleep 2; fi
+    import -window root "$OUT/tab-${name}-$mode.png" 2>/dev/null
+    echo "$name tab captured to tab-${name}-$mode.png"
+  done
+  xdotool mousemove 698 118 click 1
+  sleep 2
 }
 
 # Startup only proves the shell works. Fire the full screen hotkey so the X11
