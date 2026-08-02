@@ -172,10 +172,13 @@ build_scene() {
   sleep 2
 
   # A silent fallback here would leave every later comparison passing against
-  # nothing, so confirm the scene really is on screen before trusting it.
+  # nothing, so confirm the scene really is on screen before trusting it. The
+  # app window still covers the middle, so only the left strip is bare root.
   import -window root "$OUT/scene-onscreen.png" 2>/dev/null
+  convert "$OUT/scene.png" -crop 200x800+0+0 +repage "$OUT/scene-strip.png"
+  convert "$OUT/scene-onscreen.png" -crop 200x800+0+0 +repage "$OUT/onscreen-strip.png"
   local drift
-  drift=$(rmse_against "$OUT/scene.png" "$OUT/scene-onscreen.png")
+  drift=$(rmse_against "$OUT/scene-strip.png" "$OUT/onscreen-strip.png")
   echo "scene painted on the root, difference from the source = ${drift:-unmeasurable}"
   if [ -z "$drift" ] || awk "BEGIN{exit !($drift > 0.05)}"; then
     echo "the reference scene is not actually on screen, so captures cannot be verified"
@@ -289,7 +292,7 @@ capture_area() {
 
 check_capture() {
   local mode="$1"
-  build_scene
+  build_scene || return 1
   capture_full "$mode" || return 1
   capture_area "$mode" || return 1
   if [ -f "$DATA_DIR/history.json" ]; then
