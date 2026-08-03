@@ -19,6 +19,7 @@ import {
   Download,
   Sparkles,
   Trash2,
+  RotateCcw,
 } from "lucide-react";
 import { api } from "../lib/api";
 
@@ -47,6 +48,16 @@ interface Obj {
   y2?: number;
   text?: string;
   n?: number;
+  fs?: number;
+}
+
+type HandleKey = "nw" | "ne" | "se" | "sw";
+
+interface Bounds {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
 }
 
 interface Snapshot {
@@ -87,6 +98,23 @@ const BACKGROUNDS = [
 ];
 
 let objId = 1;
+
+const measureCtx = document.createElement("canvas").getContext("2d")!;
+
+function textFont(o: Obj) {
+  return Math.max(6, o.fs ?? 14 + o.size * 5);
+}
+
+function textSize(o: Obj) {
+  const fs = textFont(o);
+  const lines = (o.text ?? "").split("\n");
+  measureCtx.font = `bold ${fs}px "Segoe UI", sans-serif`;
+  const w = Math.max(
+    fs * 0.6,
+    ...lines.map((l) => measureCtx.measureText(l).width)
+  );
+  return { fs, lines, w, h: lines.length * fs * 1.25 };
+}
 
 function normRect(o: Obj) {
   const x = Math.min(o.x1!, o.x2!);
@@ -222,13 +250,12 @@ function drawObj(
     ctx.setLineDash([9, 6]);
     ctx.strokeRect(r.x, r.y, r.w, r.h);
   } else if (o.type === "text") {
-    const fs = 14 + o.size * 5;
+    const { fs, lines } = textSize(o);
     ctx.font = `bold ${fs}px "Segoe UI", sans-serif`;
     ctx.textBaseline = "top";
-    const lines = (o.text ?? "").split("\n");
     lines.forEach((line, i) => {
       ctx.strokeStyle = "rgba(0,0,0,0.35)";
-      ctx.lineWidth = 3;
+      ctx.lineWidth = Math.max(2, fs * 0.09);
       ctx.strokeText(line, o.x1!, o.y1! + i * fs * 1.25);
       ctx.fillText(line, o.x1!, o.y1! + i * fs * 1.25);
     });
@@ -249,12 +276,49 @@ function objBounds(o: Obj): { x: number; y: number; w: number; h: number } {
     return { x: o.x1! - r, y: o.y1! - r, w: r * 2, h: r * 2 };
   }
   if (o.type === "text") {
-    const fs = 14 + o.size * 5;
-    const lines = (o.text ?? "").split("\n");
-    const w = Math.max(...lines.map((l) => l.length)) * fs * 0.6;
-    return { x: o.x1!, y: o.y1!, w, h: lines.length * fs * 1.25 };
+    const { w, h } = textSize(o);
+    return { x: o.x1!, y: o.y1!, w, h };
   }
   return normRect(o);
+}
+
+function handleAnchors(b: Bounds, pad: number) {
+  return [
+    { key: "nw" as HandleKey, cx: b.x - pad, cy: b.y - pad },
+    { key: "ne" as HandleKey, cx: b.x + b.w + pad, cy: b.y - pad },
+    { key: "se" as HandleKey, cx: b.x + b.w + pad, cy: b.y + b.h + pad },
+    { key: "sw" as HandleKey, cx: b.x - pad, cy: b.y + b.h + pad },
+  ];
+}
+
+function oppositeCorner(b: Bounds, key: HandleKey) {
+  const left = b.x;
+  const right = b.x + b.w;
+  const top = b.y;
+  const bottom = b.y + b.h;
+  if (key === "nw") return { x: right, y: bottom };
+  if (key === "ne") return { x: left, y: bottom };
+  if (key === "se") return { x: left, y: top };
+  return { x: right, y: top };
+}
+
+function scaleObj(o: Obj, ax: number, ay: number, f: number): Obj {
+  const mx = (x: number) => ax + (x - ax) * f;
+  const my = (y: number) => ay + (y - ay) * f;
+  const m: Obj = { ...o };
+  if (o.points) m.points = o.points.map((p) => ({ x: mx(p.x), y: my(p.y) }));
+  if (o.x1 != null) m.x1 = mx(o.x1);
+  if (o.y1 != null) m.y1 = my(o.y1);
+  if (o.x2 != null) m.x2 = mx(o.x2);
+  if (o.y2 != null) m.y2 = my(o.y2);
+  if (o.type === "text") {
+    m.fs = Math.max(8, textFont(o) * f);
+  } else if (o.type === "counter") {
+    m.size = Math.max(0.5, ((14 + o.size * 2) * f - 14) / 2);
+  } else if (o.type === "pen" || o.type === "highlighter") {
+    m.size = Math.max(1, o.size * f);
+  }
+  return m;
 }
 
 export default function Editor({ id }: { id: string }) {
@@ -276,6 +340,21 @@ export default function Editor({ id }: { id: string }) {
   const [toast, setToast] = useState("");
   const [savedPath, setSavedPath] = useState("");
   const [version, setVersion] = useState(0);
+  const [hoverHandle, setHoverHandle] = useState<HandleKey | null>(null);
+  const [counterNext, setCounterNext] = useState(1);
+  const [sizeHint, setSizeHint] = useState<{
+    left: number;
+    top: number;
+    label: string;
+  } | null>(null);
+  const resizeRef = useRef<{
+    key: HandleKey;
+    ax: number;
+    ay: number;
+    w: number;
+    h: number;
+    obj: Obj;
+  } | null>(null);
   const undoRef = useRef<Snapshot[]>([]);
   const redoRef = useRef<Snapshot[]>([]);
   const dragRef = useRef<{ x: number; y: number; moved: boolean } | null>(null);
@@ -319,6 +398,13 @@ export default function Editor({ id }: { id: string }) {
       .catch((e) => showToast(String(e)));
   }, [id]);
 
+  const viewScale = () => {
+    const canvas = canvasRef.current;
+    if (!canvas || !canvas.width) return 1;
+    const r = canvas.getBoundingClientRect();
+    return r.width ? r.width / canvas.width : 1;
+  };
+
   const redraw = useCallback(() => {
     const canvas = canvasRef.current;
     const base = baseRef.current;
@@ -333,15 +419,48 @@ export default function Editor({ id }: { id: string }) {
       const o = objects.find((x) => x.id === selected);
       if (o) {
         const b = objBounds(o);
+        const s = viewScale();
+        const pad = 6 / s;
+        const hs = 11 / s;
         ctx.save();
         ctx.strokeStyle = "#22d3ee";
-        ctx.lineWidth = Math.max(1, base.width / 800);
-        ctx.setLineDash([6, 4]);
-        ctx.strokeRect(b.x - 4, b.y - 4, b.w + 8, b.h + 8);
+        ctx.lineWidth = 1.5 / s;
+        ctx.setLineDash([6 / s, 4 / s]);
+        ctx.strokeRect(b.x - pad, b.y - pad, b.w + pad * 2, b.h + pad * 2);
+        ctx.setLineDash([]);
+        for (const h of handleAnchors(b, pad)) {
+          ctx.beginPath();
+          ctx.arc(h.cx, h.cy, hs / 2, 0, Math.PI * 2);
+          ctx.fillStyle = "#22d3ee";
+          ctx.fill();
+          ctx.lineWidth = 1.5 / s;
+          ctx.strokeStyle = "#0b1220";
+          ctx.stroke();
+          ctx.strokeStyle = "#0b1220";
+          ctx.lineWidth = 1.6 / s;
+          ctx.lineCap = "round";
+          const d = hs * 0.22;
+          const dx = h.key === "nw" || h.key === "sw" ? -1 : 1;
+          const dy = h.key === "nw" || h.key === "ne" ? -1 : 1;
+          ctx.beginPath();
+          ctx.moveTo(h.cx - dx * d, h.cy - dy * d);
+          ctx.lineTo(h.cx + dx * d, h.cy + dy * d);
+          ctx.moveTo(h.cx + dx * d, h.cy + dy * d);
+          ctx.lineTo(h.cx + dx * d * 0.1, h.cy + dy * d);
+          ctx.moveTo(h.cx + dx * d, h.cy + dy * d);
+          ctx.lineTo(h.cx + dx * d, h.cy + dy * d * 0.1);
+          ctx.stroke();
+        }
         ctx.restore();
       }
     }
   }, [objects, draft, selected, ready, version]);
+
+  useEffect(() => {
+    const onResize = () => setVersion((v) => v + 1);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   useEffect(() => {
     redraw();
@@ -406,10 +525,11 @@ export default function Editor({ id }: { id: string }) {
     textEditRef.current = null;
     if (te.value.trim()) {
       pushUndo();
+      const id = objId++;
       setObjects((prev) => [
         ...prev,
         {
-          id: objId++,
+          id,
           type: "text",
           color,
           size,
@@ -418,6 +538,8 @@ export default function Editor({ id }: { id: string }) {
           text: te.value,
         },
       ]);
+      setSelected(id);
+      setTool("select");
     }
     setTextEdit(null);
   };
@@ -452,6 +574,40 @@ export default function Editor({ id }: { id: string }) {
     return focusTextInput();
   }, [textEdit?.openedAt]);
 
+  const selectedObj = () =>
+    selected == null
+      ? undefined
+      : objectsRef.current.find((o) => o.id === selected);
+
+  const hitHandle = (p: { x: number; y: number }): HandleKey | null => {
+    const o = selectedObj();
+    if (!o) return null;
+    const s = viewScale();
+    const b = objBounds(o);
+    const tol = 9 / s;
+    for (const h of handleAnchors(b, 6 / s)) {
+      if (Math.abs(p.x - h.cx) <= tol && Math.abs(p.y - h.cy) <= tol)
+        return h.key;
+    }
+    return null;
+  };
+
+  const showSizeHint = (e: React.PointerEvent, label: string) => {
+    const wrap = wrapRef.current;
+    if (!wrap) return;
+    const wr = wrap.getBoundingClientRect();
+    setSizeHint({
+      left: e.clientX - wr.left + 16,
+      top: e.clientY - wr.top + 16,
+      label,
+    });
+  };
+
+  const hintFor = (o: Obj, f: number) =>
+    o.type === "text"
+      ? `${Math.round(textFont(o))} px`
+      : `${Math.round(f * 100)}%`;
+
   const onPointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0 || !ready) return;
     const p = toCanvas(e);
@@ -465,6 +621,23 @@ export default function Editor({ id }: { id: string }) {
       (e.target as HTMLElement).setPointerCapture(e.pointerId);
     }
     if (tool === "select") {
+      const key = hitHandle(p);
+      const target = selectedObj();
+      if (key && target) {
+        pushUndo();
+        const b = objBounds(target);
+        const a = oppositeCorner(b, key);
+        resizeRef.current = {
+          key,
+          ax: a.x,
+          ay: a.y,
+          w: Math.max(1, b.w),
+          h: Math.max(1, b.h),
+          obj: target,
+        };
+        showSizeHint(e, hintFor(target, 1));
+        return;
+      }
       const hit = [...objects].reverse().find((o) => {
         const b = objBounds(o);
         return (
@@ -488,14 +661,8 @@ export default function Editor({ id }: { id: string }) {
     }
     if (tool === "counter") {
       pushUndo();
-      const n =
-        objects.filter((o) => o.type === "counter").length > 0
-          ? Math.max(
-              ...objects
-                .filter((o) => o.type === "counter")
-                .map((o) => o.n ?? 0)
-            ) + 1
-          : 1;
+      const n = counterNext;
+      setCounterNext(n + 1);
       setObjects((prev) => [
         ...prev,
         { id: objId++, type: "counter", color, size, x1: p.x, y1: p.y, n },
@@ -520,6 +687,19 @@ export default function Editor({ id }: { id: string }) {
 
   const onPointerMove = (e: React.PointerEvent) => {
     const p = toCanvas(e);
+    const rz = resizeRef.current;
+    if (tool === "select" && rz) {
+      const fx = Math.abs(p.x - rz.ax) / rz.w;
+      const fy = Math.abs(p.y - rz.ay) / rz.h;
+      const f = Math.max(0.08, Math.max(fx, fy));
+      const next = scaleObj(rz.obj, rz.ax, rz.ay, f);
+      setObjects((prev) => prev.map((o) => (o.id === rz.obj.id ? next : o)));
+      showSizeHint(e, hintFor(next, f));
+      return;
+    }
+    if (tool === "select" && !dragRef.current) {
+      setHoverHandle(hitHandle(p));
+    }
     if (tool === "select" && dragRef.current && selected != null) {
       const dx = p.x - dragRef.current.x;
       const dy = p.y - dragRef.current.y;
@@ -548,6 +728,11 @@ export default function Editor({ id }: { id: string }) {
 
   const onPointerUp = () => {
     if (tool === "select") {
+      if (resizeRef.current) {
+        resizeRef.current = null;
+        setSizeHint(null);
+        return;
+      }
       if (dragRef.current && !dragRef.current.moved) undoRef.current.pop();
       dragRef.current = null;
       return;
@@ -762,6 +947,27 @@ export default function Editor({ id }: { id: string }) {
           ))}
         </div>
 
+        {tool === "counter" && (
+          <div className="ml-1 flex shrink-0 items-center gap-1 rounded-md bg-zinc-800 py-1 pl-2 pr-1 text-xs text-zinc-300">
+            <span>
+              Next{" "}
+              <span className="font-semibold tabular-nums text-cyan-300">
+                {counterNext}
+              </span>
+            </span>
+            <button
+              title="Reset counter to 1"
+              onClick={() => {
+                setCounterNext(1);
+                showToast("Counter reset to 1");
+              }}
+              className="rounded p-1 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-100"
+            >
+              <RotateCcw size={14} />
+            </button>
+          </div>
+        )}
+
         <div className="mx-1.5 h-6 w-px shrink-0 bg-zinc-700" />
 
         <div className="flex shrink-0 items-center gap-1">
@@ -784,6 +990,9 @@ export default function Editor({ id }: { id: string }) {
             className="ml-2 w-20 shrink-0 accent-cyan-500"
             title="Size"
           />
+          <span className="w-4 shrink-0 text-center text-xs tabular-nums text-zinc-400">
+            {size}
+          </span>
         </div>
 
         <div className="mx-1.5 h-6 w-px shrink-0 bg-zinc-700" />
@@ -875,6 +1084,11 @@ export default function Editor({ id }: { id: string }) {
               style={{
                 ...canvasStyle,
                 borderRadius: beautify ? radius / 4 : 0,
+                cursor: hoverHandle
+                  ? hoverHandle === "nw" || hoverHandle === "se"
+                    ? "nwse-resize"
+                    : "nesw-resize"
+                  : undefined,
               }}
               className={
                 tool === "select"
@@ -927,6 +1141,14 @@ export default function Editor({ id }: { id: string }) {
                   maxWidth: 380,
                 }}
               />
+            )}
+            {sizeHint && (
+              <div
+                className="pointer-events-none absolute z-20 rounded bg-zinc-900/95 px-2 py-1 text-xs font-semibold tabular-nums text-cyan-300 shadow-lg ring-1 ring-cyan-500/40"
+                style={{ left: sizeHint.left, top: sizeHint.top }}
+              >
+                {sizeHint.label}
+              </div>
             )}
           </div>
           {toast && (
