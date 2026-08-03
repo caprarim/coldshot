@@ -21,7 +21,7 @@ import { api, HistoryEntry, Settings, UpdateStatus } from "../lib/api";
 type Tab = "capture" | "history" | "settings" | "update";
 
 export default function MainWindow() {
-  const [tab, setTab] = useState<Tab>("capture");
+  const [tab, setTab] = useState<Tab>("history");
   const [delay, setDelay] = useState(0);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [settings, setSettings] = useState<Settings | null>(null);

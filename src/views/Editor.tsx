@@ -903,19 +903,61 @@ export default function Editor({ id }: { id: string }) {
     return () => window.removeEventListener("keydown", onKey);
   });
 
-  const tools: { t: Tool; icon: React.ReactNode; label: string }[] = [
-    { t: "select", icon: <MousePointer2 size={17} />, label: "Select" },
-    { t: "pen", icon: <Pen size={17} />, label: "Pen" },
-    { t: "highlighter", icon: <Highlighter size={17} />, label: "Highlighter" },
-    { t: "line", icon: <Minus size={17} />, label: "Line" },
-    { t: "arrow", icon: <MoveUpRight size={17} />, label: "Arrow" },
-    { t: "rect", icon: <Square size={17} />, label: "Rectangle" },
-    { t: "ellipse", icon: <Circle size={17} />, label: "Ellipse" },
-    { t: "text", icon: <Type size={17} />, label: "Text" },
-    { t: "pixelate", icon: <Grid3x3 size={17} />, label: "Pixelate" },
-    { t: "counter", icon: <Hash size={17} />, label: "Counter" },
-    { t: "crop", icon: <Crop size={17} />, label: "Crop" },
+  const tools: {
+    t: Tool;
+    icon: React.ReactNode;
+    label: string;
+    short: string;
+  }[] = [
+    {
+      t: "select",
+      icon: <MousePointer2 size={17} />,
+      label: "Select, move and resize",
+      short: "Select",
+    },
+    { t: "pen", icon: <Pen size={17} />, label: "Pen", short: "Pen" },
+    {
+      t: "highlighter",
+      icon: <Highlighter size={17} />,
+      label: "Highlighter",
+      short: "Marker",
+    },
+    { t: "line", icon: <Minus size={17} />, label: "Line", short: "Line" },
+    {
+      t: "arrow",
+      icon: <MoveUpRight size={17} />,
+      label: "Arrow",
+      short: "Arrow",
+    },
+    {
+      t: "rect",
+      icon: <Square size={17} />,
+      label: "Rectangle",
+      short: "Box",
+    },
+    {
+      t: "ellipse",
+      icon: <Circle size={17} />,
+      label: "Ellipse",
+      short: "Circle",
+    },
+    { t: "text", icon: <Type size={17} />, label: "Text", short: "Text" },
+    {
+      t: "pixelate",
+      icon: <Grid3x3 size={17} />,
+      label: "Pixelate to hide something",
+      short: "Blur",
+    },
+    {
+      t: "counter",
+      icon: <Hash size={17} />,
+      label: "Numbered steps",
+      short: "Number",
+    },
+    { t: "crop", icon: <Crop size={17} />, label: "Crop", short: "Crop" },
   ];
+
+  const labelClass = "text-[9px] font-medium leading-none tracking-tight";
 
   const canvasStyle: React.CSSProperties = {
     maxWidth: "100%",
@@ -928,7 +970,7 @@ export default function Editor({ id }: { id: string }) {
     <div className="flex h-full flex-col bg-zinc-950 text-zinc-200">
       <div className="flex flex-wrap items-center gap-x-1 gap-y-1.5 border-b border-zinc-800 bg-zinc-900 px-3 py-2">
         <div className="flex shrink-0 items-center gap-1">
-          {tools.map(({ t, icon, label }) => (
+          {tools.map(({ t, icon, label, short }) => (
             <button
               key={t}
               title={label}
@@ -936,13 +978,14 @@ export default function Editor({ id }: { id: string }) {
                 setTool(t);
                 setSelected(null);
               }}
-              className={`shrink-0 rounded-md p-2 transition-colors ${
+              className={`flex shrink-0 flex-col items-center gap-1 rounded-md px-1.5 pb-1 pt-1.5 transition-colors ${
                 tool === t
                   ? "bg-cyan-600 text-white"
                   : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
               }`}
             >
               {icon}
+              <span className={labelClass}>{short}</span>
             </button>
           ))}
         </div>
@@ -999,61 +1042,68 @@ export default function Editor({ id }: { id: string }) {
 
         <div className="flex shrink-0 items-center gap-1">
           <button
-            title="Undo"
+            title="Undo (Ctrl+Z)"
             onClick={undo}
-            className="rounded-md p-2 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+            className="flex flex-col items-center gap-1 rounded-md px-1.5 pb-1 pt-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
           >
             <Undo2 size={17} />
+            <span className={labelClass}>Undo</span>
           </button>
           <button
-            title="Redo"
+            title="Redo (Ctrl+Y)"
             onClick={redo}
-            className="rounded-md p-2 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+            className="flex flex-col items-center gap-1 rounded-md px-1.5 pb-1 pt-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
           >
             <Redo2 size={17} />
+            <span className={labelClass}>Redo</span>
           </button>
           <button
             title="Delete selected"
             onClick={deleteSelected}
-            className="rounded-md p-2 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+            className="flex flex-col items-center gap-1 rounded-md px-1.5 pb-1 pt-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
           >
             <Trash2 size={17} />
+            <span className={labelClass}>Delete</span>
           </button>
         </div>
 
         <div className="ml-auto flex shrink-0 items-center gap-1">
           <button
-            title="Beautify"
+            title="Beautify: gradient background and rounded corners"
             onClick={() => setBeautify(!beautify)}
-            className={`rounded-md p-2 ${
+            className={`flex flex-col items-center gap-1 rounded-md px-1.5 pb-1 pt-1.5 ${
               beautify
                 ? "bg-fuchsia-600 text-white"
                 : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
             }`}
           >
             <Sparkles size={17} />
+            <span className={labelClass}>Beautify</span>
           </button>
           <div className="mx-1 h-6 w-px shrink-0 bg-zinc-700" />
           <button
             title="Pin to screen"
             onClick={doPin}
-            className="rounded-md p-2 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+            className="flex flex-col items-center gap-1 rounded-md px-1.5 pb-1 pt-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
           >
             <Pin size={17} />
+            <span className={labelClass}>Pin</span>
           </button>
           <button
             title="Copy (Ctrl+C)"
             onClick={doCopy}
-            className="rounded-md p-2 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+            className="flex flex-col items-center gap-1 rounded-md px-1.5 pb-1 pt-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
           >
             <Copy size={17} />
+            <span className={labelClass}>Copy</span>
           </button>
           <button
             title="Quick save (Ctrl+S)"
             onClick={doQuickSave}
-            className="rounded-md p-2 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+            className="flex flex-col items-center gap-1 rounded-md px-1.5 pb-1 pt-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
           >
             <Save size={17} />
+            <span className={labelClass}>Save</span>
           </button>
           <button
             onClick={doSaveAs}
