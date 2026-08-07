@@ -61,4 +61,5 @@ pub struct AppState {
     pub update_file: Mutex<Option<std::path::PathBuf>>,
     pub update_busy: Mutex<bool>,
     pub main_hidden: Mutex<bool>,
+    pub preview_pos: Mutex<Option<(i32, i32)>>,
 }

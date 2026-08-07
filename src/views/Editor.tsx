@@ -49,6 +49,7 @@ interface Obj {
   text?: string;
   n?: number;
   fs?: number;
+  wrap?: number;
 }
 
 type HandleKey = "nw" | "ne" | "se" | "sw";
@@ -66,11 +67,15 @@ interface Snapshot {
 }
 
 interface TextEdit {
+  id?: number;
   x: number;
   y: number;
   left: number;
   top: number;
+  width: number;
   scale: number;
+  fs: number;
+  wrap: number;
   value: string;
   openedAt: number;
 }
@@ -105,9 +110,48 @@ function textFont(o: Obj) {
   return Math.max(6, o.fs ?? 14 + o.size * 5);
 }
 
+function wrapLines(text: string, fs: number, maxW: number) {
+  measureCtx.font = `bold ${fs}px "Segoe UI", sans-serif`;
+  const fits = (s: string) => measureCtx.measureText(s).width <= maxW;
+  const out: string[] = [];
+  for (const para of text.split("\n")) {
+    if (maxW <= 0 || fits(para)) {
+      out.push(para);
+      continue;
+    }
+    let line = "";
+    for (const word of para.split(" ")) {
+      const cand = line ? `${line} ${word}` : word;
+      if (fits(cand)) {
+        line = cand;
+        continue;
+      }
+      if (line) {
+        out.push(line);
+        line = "";
+      }
+      if (fits(word)) {
+        line = word;
+        continue;
+      }
+      let chunk = "";
+      for (const ch of word) {
+        if (chunk && !fits(chunk + ch)) {
+          out.push(chunk);
+          chunk = "";
+        }
+        chunk += ch;
+      }
+      line = chunk;
+    }
+    out.push(line);
+  }
+  return out;
+}
+
 function textSize(o: Obj) {
   const fs = textFont(o);
-  const lines = (o.text ?? "").split("\n");
+  const lines = wrapLines(o.text ?? "", fs, o.wrap ?? 0);
   measureCtx.font = `bold ${fs}px "Segoe UI", sans-serif`;
   const w = Math.max(
     fs * 0.6,
@@ -312,7 +356,10 @@ function scaleObj(o: Obj, ax: number, ay: number, f: number): Obj {
   if (o.x2 != null) m.x2 = mx(o.x2);
   if (o.y2 != null) m.y2 = my(o.y2);
   if (o.type === "text") {
-    m.fs = Math.max(8, textFont(o) * f);
+    const prev = textFont(o);
+    const next = Math.max(8, prev * f);
+    m.fs = next;
+    if (o.wrap) m.wrap = Math.max(24, (o.wrap * next) / prev);
   } else if (o.type === "counter") {
     m.size = Math.max(0.5, ((14 + o.size * 2) * f - 14) / 2);
   } else if (o.type === "pen" || o.type === "highlighter") {
@@ -346,6 +393,11 @@ export default function Editor({ id }: { id: string }) {
     left: number;
     top: number;
     label: string;
+  } | null>(null);
+  const [menu, setMenu] = useState<{
+    left: number;
+    top: number;
+    id: number;
   } | null>(null);
   const resizeRef = useRef<{
     key: HandleKey;
@@ -413,7 +465,10 @@ export default function Editor({ id }: { id: string }) {
     canvas.height = base.height;
     const ctx = canvas.getContext("2d")!;
     ctx.drawImage(base, 0, 0);
-    for (const o of objects) drawObj(ctx, o, base);
+    for (const o of objects) {
+      if (textEdit?.id === o.id) continue;
+      drawObj(ctx, o, base);
+    }
     if (draft) drawObj(ctx, draft, base);
     if (selected != null) {
       const o = objects.find((x) => x.id === selected);
@@ -454,7 +509,7 @@ export default function Editor({ id }: { id: string }) {
         ctx.restore();
       }
     }
-  }, [objects, draft, selected, ready, version]);
+  }, [objects, draft, selected, ready, version, textEdit?.id]);
 
   useEffect(() => {
     const onResize = () => setVersion((v) => v + 1);
@@ -492,7 +547,7 @@ export default function Editor({ id }: { id: string }) {
   const undo = () => applySnapshot(undoRef.current, redoRef.current);
   const redo = () => applySnapshot(redoRef.current, undoRef.current);
 
-  const toCanvas = (e: React.PointerEvent) => {
+  const toCanvas = (e: { clientX: number; clientY: number }) => {
     const canvas = canvasRef.current!;
     const rect = canvas.getBoundingClientRect();
     return {
@@ -501,20 +556,37 @@ export default function Editor({ id }: { id: string }) {
     };
   };
 
-  const openTextAt = (p: { x: number; y: number }, e: React.PointerEvent) => {
+  const openTextAt = (p: { x: number; y: number }, existing?: Obj) => {
     const canvas = canvasRef.current!;
     const wrap = wrapRef.current;
     const cr = canvas.getBoundingClientRect();
     const wr = wrap ? wrap.getBoundingClientRect() : cr;
-    const rawLeft = e.clientX - wr.left - 8;
-    const rawTop = e.clientY - wr.top - 6;
+    const scale = cr.width / canvas.width || 1;
+    const wrapPx =
+      existing?.wrap ?? Math.max(60, canvas.width - p.x - 12);
+    const fs = existing ? textFont(existing) : 14 + size * 5;
+    const left = Math.max(
+      0,
+      Math.min(cr.left - wr.left + p.x * scale - 8, Math.max(0, wr.width - 60))
+    );
+    const top = Math.max(
+      0,
+      Math.min(cr.top - wr.top + p.y * scale - 6, Math.max(0, wr.height - 40))
+    );
     setTextEdit({
+      id: existing?.id,
       x: p.x,
       y: p.y,
-      left: Math.max(0, Math.min(rawLeft, Math.max(0, wr.width - 190))),
-      top: Math.max(0, Math.min(rawTop, Math.max(0, wr.height - 46))),
-      scale: cr.width / canvas.width || 1,
-      value: "",
+      left,
+      top,
+      width: Math.max(
+        140,
+        Math.min(wrapPx * scale + 16, Math.max(140, wr.width - left - 2))
+      ),
+      scale,
+      fs,
+      wrap: wrapPx,
+      value: existing?.text ?? "",
       openedAt: Date.now(),
     });
   };
@@ -523,7 +595,18 @@ export default function Editor({ id }: { id: string }) {
     const te = textEditRef.current;
     if (!te) return;
     textEditRef.current = null;
-    if (te.value.trim()) {
+    if (te.id != null) {
+      pushUndo();
+      if (te.value.trim()) {
+        setObjects((prev) =>
+          prev.map((o) => (o.id === te.id ? { ...o, text: te.value } : o))
+        );
+        setSelected(te.id);
+      } else {
+        setObjects((prev) => prev.filter((o) => o.id !== te.id));
+        setSelected(null);
+      }
+    } else if (te.value.trim()) {
       pushUndo();
       const id = objId++;
       setObjects((prev) => [
@@ -536,6 +619,8 @@ export default function Editor({ id }: { id: string }) {
           x1: te.x,
           y1: te.y,
           text: te.value,
+          fs: te.fs,
+          wrap: te.wrap,
         },
       ]);
       setSelected(id);
@@ -550,6 +635,8 @@ export default function Editor({ id }: { id: string }) {
     const attempt = () => {
       const el = textInputRef.current;
       if (!el || !textEditRef.current) return;
+      el.style.height = "auto";
+      el.style.height = `${el.scrollHeight}px`;
       el.focus({ preventScroll: true });
       el.setSelectionRange(el.value.length, el.value.length);
       if (document.activeElement !== el && tries++ < 20) {
@@ -573,6 +660,13 @@ export default function Editor({ id }: { id: string }) {
     if (!textEdit) return;
     return focusTextInput();
   }, [textEdit?.openedAt]);
+
+  useEffect(() => {
+    if (!menu) return;
+    const close = () => setMenu(null);
+    window.addEventListener("pointerdown", close);
+    return () => window.removeEventListener("pointerdown", close);
+  }, [menu]);
 
   const selectedObj = () =>
     selected == null
@@ -611,10 +705,11 @@ export default function Editor({ id }: { id: string }) {
   const onPointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0 || !ready) return;
     const p = toCanvas(e);
+    if (menu) setMenu(null);
     if (textEdit) {
       e.preventDefault();
       commitText();
-      if (tool === "text") openTextAt(p, e);
+      if (tool === "text") openTextAt(p);
       return;
     }
     if (tool !== "text") {
@@ -656,7 +751,7 @@ export default function Editor({ id }: { id: string }) {
     }
     if (tool === "text") {
       e.preventDefault();
-      openTextAt(p, e);
+      openTextAt(p);
       return;
     }
     if (tool === "counter") {
@@ -724,6 +819,47 @@ export default function Editor({ id }: { id: string }) {
     } else {
       setDraft({ ...draft, x2: p.x, y2: p.y });
     }
+  };
+
+  const onContextMenu = (e: React.MouseEvent) => {
+    if (!ready) return;
+    e.preventDefault();
+    const p = toCanvas(e);
+    const hit = [...objectsRef.current]
+      .reverse()
+      .find((o) => {
+        if (o.type !== "text") return false;
+        const b = objBounds(o);
+        return (
+          p.x >= b.x - 8 &&
+          p.x <= b.x + b.w + 8 &&
+          p.y >= b.y - 8 &&
+          p.y <= b.y + b.h + 8
+        );
+      });
+    if (!hit) {
+      setMenu(null);
+      return;
+    }
+    const wrap = wrapRef.current;
+    if (!wrap) return;
+    const wr = wrap.getBoundingClientRect();
+    if (textEditRef.current) commitText();
+    setSelected(hit.id);
+    setMenu({
+      left: Math.min(e.clientX - wr.left, Math.max(0, wr.width - 96)),
+      top: Math.min(e.clientY - wr.top, Math.max(0, wr.height - 40)),
+      id: hit.id,
+    });
+  };
+
+  const startEditText = (id: number) => {
+    const o = objectsRef.current.find((x) => x.id === id);
+    setMenu(null);
+    if (!o) return;
+    setSelected(null);
+    setTool("select");
+    openTextAt({ x: o.x1!, y: o.y1! }, o);
   };
 
   const onPointerUp = () => {
@@ -896,6 +1032,7 @@ export default function Editor({ id }: { id: string }) {
       } else if (e.key === "Delete" || e.key === "Backspace") {
         deleteSelected();
       } else if (e.key === "Escape") {
+        setMenu(null);
         setSelected(null);
       }
     };
@@ -1150,7 +1287,23 @@ export default function Editor({ id }: { id: string }) {
               onPointerDown={onPointerDown}
               onPointerMove={onPointerMove}
               onPointerUp={onPointerUp}
+              onContextMenu={onContextMenu}
             />
+            {menu && (
+              <div
+                className="absolute z-30 overflow-hidden rounded-md border border-zinc-700 bg-zinc-900 py-1 shadow-xl"
+                style={{ left: menu.left, top: menu.top }}
+                onPointerDown={(e) => e.stopPropagation()}
+                onContextMenu={(e) => e.preventDefault()}
+              >
+                <button
+                  onClick={() => startEditText(menu.id)}
+                  className="block w-full px-4 py-1.5 text-left text-sm text-zinc-200 hover:bg-zinc-800"
+                >
+                  Edit
+                </button>
+              </div>
+            )}
             {textEdit && (
               <textarea
                 ref={textInputRef}
@@ -1180,15 +1333,19 @@ export default function Editor({ id }: { id: string }) {
                 style={{
                   left: textEdit.left,
                   top: textEdit.top,
-                  color,
+                  width: textEdit.width,
+                  color:
+                    textEdit.id != null
+                      ? objects.find((o) => o.id === textEdit.id)?.color ?? color
+                      : color,
                   fontFamily: '"Segoe UI", sans-serif',
                   fontWeight: 700,
                   fontSize: Math.max(
-                    13,
-                    Math.round((14 + size * 5) * textEdit.scale)
+                    12,
+                    Math.round(textEdit.fs * textEdit.scale)
                   ),
-                  minWidth: 170,
-                  maxWidth: 380,
+                  lineHeight: 1.25,
+                  wordBreak: "break-word",
                 }}
               />
             )}

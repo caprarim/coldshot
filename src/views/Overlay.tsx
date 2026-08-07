@@ -16,9 +16,18 @@ export default function Overlay() {
   const startRef = useRef<{ x: number; y: number } | null>(null);
   const draggingRef = useRef(false);
   const doneRef = useRef(false);
+  const pendingRef = useRef<{ x: number; y: number } | null>(null);
+  const frameRef = useRef(0);
+  const dataRef = useRef<OverlayData | null>(null);
 
   useEffect(() => {
-    api.getOverlayData().then(setData).catch(() => api.cancelCapture());
+    api
+      .getOverlayData()
+      .then((d) => {
+        dataRef.current = d;
+        setData(d);
+      })
+      .catch(() => api.cancelCapture());
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         if (doneRef.current) return;
@@ -27,7 +36,10 @@ export default function Overlay() {
       }
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      if (frameRef.current) cancelAnimationFrame(frameRef.current);
+    };
   }, []);
 
   const findWindow = (x: number, y: number, wins: WinRect[]) =>
@@ -40,17 +52,19 @@ export default function Overlay() {
     draggingRef.current = false;
   };
 
-  const onMouseMove = (e: React.MouseEvent) => {
-    setMouse({ x: e.clientX, y: e.clientY });
-    if (!data) return;
-    if (startRef.current) {
-      const dx = e.clientX - startRef.current.x;
-      const dy = e.clientY - startRef.current.y;
+  const flush = () => {
+    frameRef.current = 0;
+    const p = pendingRef.current;
+    if (!p) return;
+    const start = startRef.current;
+    if (start) {
+      const dx = p.x - start.x;
+      const dy = p.y - start.y;
       if (Math.abs(dx) > 4 || Math.abs(dy) > 4) draggingRef.current = true;
       if (draggingRef.current) {
         setSel({
-          x: Math.min(startRef.current.x, e.clientX),
-          y: Math.min(startRef.current.y, e.clientY),
+          x: Math.min(start.x, p.x),
+          y: Math.min(start.y, p.y),
           w: Math.abs(dx),
           h: Math.abs(dy),
         });
@@ -58,20 +72,39 @@ export default function Overlay() {
         return;
       }
     }
-    setHoverWin(findWindow(e.clientX, e.clientY, data.windows));
+    setMouse(p);
+    const d = dataRef.current;
+    if (d) setHoverWin(findWindow(p.x, p.y, d.windows));
+  };
+
+  const onMouseMove = (e: React.MouseEvent) => {
+    pendingRef.current = { x: e.clientX, y: e.clientY };
+    if (!frameRef.current) frameRef.current = requestAnimationFrame(flush);
   };
 
   const onMouseUp = (e: React.MouseEvent) => {
     if (e.button !== 0 || doneRef.current) return;
-    const pressed = startRef.current !== null;
+    const start = startRef.current;
     const dragged = draggingRef.current;
     startRef.current = null;
     draggingRef.current = false;
-    if (!pressed) return;
-    if (dragged && sel && sel.w > 4 && sel.h > 4) {
-      doneRef.current = true;
-      api.finishCapture(sel.x, sel.y, sel.w, sel.h);
-      return;
+    if (frameRef.current) {
+      cancelAnimationFrame(frameRef.current);
+      frameRef.current = 0;
+    }
+    if (!start) return;
+    if (dragged) {
+      const rect = {
+        x: Math.min(start.x, e.clientX),
+        y: Math.min(start.y, e.clientY),
+        w: Math.abs(e.clientX - start.x),
+        h: Math.abs(e.clientY - start.y),
+      };
+      if (rect.w > 4 && rect.h > 4) {
+        doneRef.current = true;
+        api.finishCapture(rect.x, rect.y, rect.w, rect.h);
+        return;
+      }
     }
     const win = data ? findWindow(e.clientX, e.clientY, data.windows) : null;
     if (win) {
@@ -104,26 +137,43 @@ export default function Overlay() {
       {data && (
         <img
           src={data.image}
-          className="absolute inset-0 h-full w-full"
+          className="absolute inset-0 h-full w-full transform-gpu"
           draggable={false}
           alt=""
         />
       )}
       {active ? (
-        <div
-          className="absolute border border-cyan-400"
-          style={{
-            left: active.x,
-            top: active.y,
-            width: active.w,
-            height: active.h,
-            boxShadow: "0 0 0 100000px rgba(0,0,0,0.45)",
-          }}
-        >
-          <div className="absolute -top-7 left-0 rounded bg-zinc-900/90 px-2 py-0.5 font-mono text-xs text-cyan-300">
-            {Math.round(active.w)} x {Math.round(active.h)}
+        <>
+          <div
+            className="pointer-events-none absolute left-0 right-0 top-0 bg-black/45"
+            style={{ height: Math.max(0, active.y) }}
+          />
+          <div
+            className="pointer-events-none absolute bottom-0 left-0 right-0 bg-black/45"
+            style={{ top: active.y + active.h }}
+          />
+          <div
+            className="pointer-events-none absolute left-0 bg-black/45"
+            style={{ top: active.y, height: active.h, width: Math.max(0, active.x) }}
+          />
+          <div
+            className="pointer-events-none absolute right-0 bg-black/45"
+            style={{ top: active.y, height: active.h, left: active.x + active.w }}
+          />
+          <div
+            className="pointer-events-none absolute border border-cyan-400"
+            style={{
+              left: active.x,
+              top: active.y,
+              width: active.w,
+              height: active.h,
+            }}
+          >
+            <div className="absolute -top-7 left-0 rounded bg-zinc-900/90 px-2 py-0.5 font-mono text-xs text-cyan-300">
+              {Math.round(active.w)} x {Math.round(active.h)}
+            </div>
           </div>
-        </div>
+        </>
       ) : (
         <>
           <div className="pointer-events-none absolute inset-0 bg-black/35" />

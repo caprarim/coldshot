@@ -70,29 +70,39 @@ fn make_thumb(img: &image::RgbaImage) -> image::RgbaImage {
     }
 }
 
-pub fn store_capture(app: &AppHandle, img: &image::RgbaImage) -> Result<String, String> {
+pub fn new_capture_id() -> String {
     let now = chrono::Local::now();
-    let id = format!(
+    format!(
         "{}-{:03}",
         now.format("%Y%m%d-%H%M%S"),
         now.timestamp_subsec_millis() % 1000
-    );
-    let dir = captures_dir(app)?;
-    fs::write(dir.join(format!("{id}.png")), encode_png(img)?)
-        .map_err(|e| e.to_string())?;
+    )
+}
 
-    let (w, h) = (img.width(), img.height());
-    fs::write(dir.join(format!("{id}_thumb.png")), encode_png(&make_thumb(img))?)
-        .map_err(|e| e.to_string())?;
+pub fn store_thumb(app: &AppHandle, id: &str, img: &image::RgbaImage) -> Result<(), String> {
+    let dir = captures_dir(app)?;
+    fs::write(
+        dir.join(format!("{id}_thumb.png")),
+        encode_png(&make_thumb(img))?,
+    )
+    .map_err(|e| e.to_string())
+}
+
+pub fn store_full(app: &AppHandle, id: &str, img: &image::RgbaImage) -> Result<(), String> {
+    let dir = captures_dir(app)?;
+    let path = dir.join(format!("{id}.png"));
+    let tmp = dir.join(format!("{id}.png.part"));
+    fs::write(&tmp, encode_png(img)?).map_err(|e| e.to_string())?;
+    fs::rename(&tmp, &path).map_err(|e| e.to_string())?;
 
     let mut items = read_history(app);
     items.insert(
         0,
         HistoryItem {
-            id: id.clone(),
-            width: w,
-            height: h,
-            created: now.format("%Y-%m-%d %H:%M").to_string(),
+            id: id.to_string(),
+            width: img.width(),
+            height: img.height(),
+            created: chrono::Local::now().format("%Y-%m-%d %H:%M").to_string(),
         },
     );
     while items.len() > 100 {
@@ -101,8 +111,16 @@ pub fn store_capture(app: &AppHandle, img: &image::RgbaImage) -> Result<String, 
             let _ = fs::remove_file(dir.join(format!("{}_thumb.png", old.id)));
         }
     }
-    write_history(app, &items)?;
-    Ok(id)
+    write_history(app, &items)
+}
+
+pub fn wait_for_file(path: &std::path::Path) {
+    for _ in 0..80 {
+        if path.exists() {
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(25));
+    }
 }
 
 pub fn copy_rgba_to_clipboard(img: &image::RgbaImage) -> Result<(), String> {
@@ -193,6 +211,7 @@ pub async fn load_capture(app: AppHandle, id: String) -> Result<String, String> 
         return Err("Invalid id".into());
     }
     let path = captures_dir(&app)?.join(format!("{id}.png"));
+    wait_for_file(&path);
     let bytes = fs::read(path).map_err(|e| e.to_string())?;
     Ok(format!("data:image/png;base64,{}", STANDARD.encode(bytes)))
 }
@@ -412,6 +431,9 @@ pub fn open_history(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub fn close_window(app: AppHandle, label: String) -> Result<(), String> {
     if let Some(w) = app.get_webview_window(&label) {
+        if label == "preview" {
+            return w.hide().map_err(|e| e.to_string());
+        }
         w.close().map_err(|e| e.to_string())?;
         if let Some(n) = label.strip_prefix("pin-").and_then(|s| s.parse::<u32>().ok()) {
             let state = app.state::<AppState>();
