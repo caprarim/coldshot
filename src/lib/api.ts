@@ -9,7 +9,7 @@ export interface WinRect {
 }
 
 export interface OverlayData {
-  image: string;
+  seq: number;
   windows: WinRect[];
   mode: string;
 }
@@ -43,9 +43,11 @@ export const api = {
   startCapture: (mode: string, delayMs: number) =>
     invoke<void>("start_capture", { mode, delayMs }),
   getOverlayData: () => invoke<OverlayData>("get_overlay_data"),
+  getOverlayImage: () => invoke<ArrayBuffer>("get_overlay_image"),
   finishCapture: (x: number, y: number, w: number, h: number) =>
     invoke<void>("finish_capture", { x, y, w, h }),
   cancelCapture: () => invoke<void>("cancel_capture"),
+  overlayReady: (seq: number) => invoke<void>("overlay_ready", { seq }),
   loadCapture: (id: string) => invoke<string>("load_capture", { id }),
   loadThumb: (id: string) => invoke<string>("load_thumb", { id }),
   updateCapture: (id: string, data: string) =>

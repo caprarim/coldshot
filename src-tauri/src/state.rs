@@ -12,6 +12,7 @@ pub struct WinRect {
 }
 
 pub struct Frozen {
+    pub seq: u64,
     pub img: image::RgbaImage,
     pub png: Vec<u8>,
     pub scale: f64,

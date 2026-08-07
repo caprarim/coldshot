@@ -29,9 +29,11 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             capture::start_capture,
             capture::get_overlay_data,
+            capture::get_overlay_image,
             capture::finish_capture,
             capture::cancel_capture,
             capture::open_editor,
+            capture::overlay_ready,
             files::get_history,
             files::load_capture,
             files::load_thumb,

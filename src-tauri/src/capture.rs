@@ -1,15 +1,16 @@
 use crate::files;
 use crate::state::{AppState, Frozen, WinRect};
-use base64::engine::general_purpose::STANDARD;
-use base64::Engine;
-use image::ImageFormat;
+use image::codecs::png::{CompressionType, FilterType, PngEncoder};
+use image::{ExtendedColorType, ImageEncoder};
 use serde::Serialize;
-use std::io::Cursor;
+use std::sync::atomic::{AtomicU64, Ordering};
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
+
+static CAPTURE_SEQ: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Serialize)]
 pub struct OverlayData {
-    pub image: String,
+    pub seq: u64,
     pub windows: Vec<WinRect>,
     pub mode: String,
 }
@@ -175,12 +176,18 @@ fn freeze(app: &AppHandle, mode: &str) -> Result<(), String> {
         }
     }
 
+    // The freeze frame is only ever shown in the overlay, never written to disk,
+    // so it is encoded for speed. Default PNG compression on a full screen costs
+    // hundreds of milliseconds and is what made a capture feel choppy; PNG is
+    // lossless at every level, so nothing is given up here.
     let mut png = Vec::new();
-    img.write_to(&mut Cursor::new(&mut png), ImageFormat::Png)
+    PngEncoder::new_with_quality(&mut png, CompressionType::Fast, FilterType::NoFilter)
+        .write_image(img.as_raw(), mon_w, mon_h, ExtendedColorType::Rgba8)
         .map_err(|e| e.to_string())?;
 
     let state = app.state::<AppState>();
     *state.frozen.lock().unwrap() = Some(Frozen {
+        seq: CAPTURE_SEQ.fetch_add(1, Ordering::SeqCst) + 1,
         img,
         png,
         scale,
@@ -195,11 +202,11 @@ fn freeze(app: &AppHandle, mode: &str) -> Result<(), String> {
 }
 
 fn create_overlay(app: &AppHandle) {
-    let (mx, my, pw, ph) = {
+    let (mx, my, pw, ph, seq) = {
         let state = app.state::<AppState>();
         let guard = state.frozen.lock().unwrap();
         match guard.as_ref() {
-            Some(f) => (f.mon_x, f.mon_y, f.mon_w, f.mon_h),
+            Some(f) => (f.mon_x, f.mon_y, f.mon_w, f.mon_h, f.seq),
             None => {
                 restore_main(app);
                 return;
@@ -226,8 +233,6 @@ fn create_overlay(app: &AppHandle) {
             Ok(w) => {
                 let _ = w.set_position(tauri::PhysicalPosition::new(mx, my));
                 let _ = w.set_size(tauri::PhysicalSize::new(pw, ph));
-                let _ = w.show();
-                let _ = w.set_focus();
             }
             Err(e) => {
                 eprintln!("overlay failed: {e}");
@@ -236,6 +241,38 @@ fn create_overlay(app: &AppHandle) {
             }
         }
     });
+
+    let app3 = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(4000));
+        show_overlay(&app3, seq);
+    });
+}
+
+fn show_overlay(app: &AppHandle, seq: u64) {
+    {
+        let state = app.state::<AppState>();
+        let guard = state.frozen.lock().unwrap();
+        match guard.as_ref() {
+            Some(f) if f.seq == seq => {}
+            _ => return,
+        }
+    }
+    let Some(w) = app.get_webview_window("overlay") else {
+        return;
+    };
+    let _ = app.run_on_main_thread(move || {
+        if w.is_visible().unwrap_or(false) {
+            return;
+        }
+        let _ = w.show();
+        let _ = w.set_focus();
+    });
+}
+
+#[tauri::command]
+pub fn overlay_ready(app: AppHandle, seq: u64) {
+    show_overlay(&app, seq);
 }
 
 fn close_overlay(app: &AppHandle) {
@@ -395,10 +432,20 @@ pub async fn get_overlay_data(app: AppHandle) -> Result<OverlayData, String> {
     let guard = state.frozen.lock().unwrap();
     let f = guard.as_ref().ok_or("No active capture")?;
     Ok(OverlayData {
-        image: format!("data:image/png;base64,{}", STANDARD.encode(&f.png)),
+        seq: f.seq,
         windows: f.windows.clone(),
         mode: f.mode.clone(),
     })
+}
+
+#[tauri::command]
+pub async fn get_overlay_image(app: AppHandle) -> Result<tauri::ipc::Response, String> {
+    let png = {
+        let state = app.state::<AppState>();
+        let guard = state.frozen.lock().unwrap();
+        guard.as_ref().ok_or("No active capture")?.png.clone()
+    };
+    Ok(tauri::ipc::Response::new(png))
 }
 
 #[tauri::command]
