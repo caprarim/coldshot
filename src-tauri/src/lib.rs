@@ -32,7 +32,6 @@ pub fn run() {
             capture::finish_capture,
             capture::cancel_capture,
             capture::open_editor,
-            capture::preview_ready,
             files::get_history,
             files::load_capture,
             files::load_thumb,

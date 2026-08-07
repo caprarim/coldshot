@@ -55,7 +55,6 @@ export const api = {
   revealCapture: (id: string) => invoke<void>("reveal_capture", { id }),
   revealPath: (path: string) => invoke<void>("reveal_path", { path }),
   openEditor: (id: string) => invoke<void>("open_editor", { id }),
-  previewReady: () => invoke<void>("preview_ready"),
   copyImage: (data: string) => invoke<void>("copy_image", { data }),
   saveImageAs: (data: string, name: string) =>
     invoke<string | null>("save_image_as", { data, name }),

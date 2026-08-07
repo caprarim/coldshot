@@ -2,9 +2,9 @@ use crate::files;
 use crate::state::{AppState, Frozen, WinRect};
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
-use image::codecs::png::{CompressionType, FilterType, PngEncoder};
-use image::{ExtendedColorType, ImageEncoder};
+use image::ImageFormat;
 use serde::Serialize;
+use std::io::Cursor;
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
 #[derive(Serialize)]
@@ -175,13 +175,8 @@ fn freeze(app: &AppHandle, mode: &str) -> Result<(), String> {
         }
     }
 
-    // The freeze frame is only ever shown in the overlay, never written to disk,
-    // so it is encoded for speed. Default PNG compression on a full screen costs
-    // hundreds of milliseconds and is what made a capture feel choppy; PNG is
-    // lossless at every level, so nothing is given up here.
     let mut png = Vec::new();
-    PngEncoder::new_with_quality(&mut png, CompressionType::Fast, FilterType::NoFilter)
-        .write_image(img.as_raw(), mon_w, mon_h, ExtendedColorType::Rgba8)
+    img.write_to(&mut Cursor::new(&mut png), ImageFormat::Png)
         .map_err(|e| e.to_string())?;
 
     let state = app.state::<AppState>();
@@ -280,28 +275,25 @@ fn finalize_frozen(app: &AppHandle, frozen: Frozen, x: f64, y: f64, w: f64, h: f
         return;
     }
     let cropped = image::imageops::crop_imm(&frozen.img, px, py, pw, ph).to_image();
-    let id = files::new_capture_id();
-    if let Err(e) = files::store_thumb(app, &id, &cropped) {
-        eprintln!("store failed: {e}");
-        restore_main(app);
-        return;
+    match files::store_capture(app, &cropped) {
+        Ok(id) => {
+            let auto_copy = {
+                let state = app.state::<AppState>();
+                let s = state.settings.lock().unwrap();
+                s.auto_copy
+            };
+            if auto_copy {
+                let _ = files::copy_rgba_to_clipboard(&cropped);
+            }
+            take_main_hidden(app);
+            let _ = app.emit("capture-saved", id.clone());
+            open_preview_window(app, &id, frozen.mon_x, frozen.mon_y, frozen.mon_h, frozen.scale);
+        }
+        Err(e) => {
+            eprintln!("store failed: {e}");
+            restore_main(app);
+        }
     }
-    take_main_hidden(app);
-    open_preview_window(app, &id, frozen.mon_x, frozen.mon_y, frozen.mon_h, frozen.scale);
-
-    let auto_copy = {
-        let state = app.state::<AppState>();
-        let s = state.settings.lock().unwrap();
-        s.auto_copy
-    };
-    if auto_copy {
-        let _ = files::copy_rgba_to_clipboard(&cropped);
-    }
-    if let Err(e) = files::store_full(app, &id, &cropped) {
-        eprintln!("store failed: {e}");
-        return;
-    }
-    let _ = app.emit("capture-saved", id);
 }
 
 const PREVIEW_W: f64 = 276.0;
@@ -320,61 +312,37 @@ pub fn open_preview_window(
     mon_h: u32,
     scale: f64,
 ) {
-    let x = mon_x + (PREVIEW_MARGIN * scale).round() as i32;
-    let y = mon_y + mon_h as i32
-        - ((PREVIEW_H + PREVIEW_MARGIN + TASKBAR_ALLOWANCE) * scale).round() as i32;
-    *app.state::<AppState>().preview_pos.lock().unwrap() = Some((x, y));
-
-    if app.get_webview_window("preview").is_some() {
-        let _ = app.emit_to("preview", "preview-capture", id.to_string());
-    } else {
-        let url = format!("index.html?view=preview&id={id}");
-        let app2 = app.clone();
-        let _ = app.run_on_main_thread(move || {
-            let builder = WebviewWindowBuilder::new(&app2, "preview", WebviewUrl::App(url.into()))
-                .title("ColdShot Preview")
-                .inner_size(PREVIEW_W, PREVIEW_H)
-                .decorations(false)
-                .resizable(false)
-                .maximizable(false)
-                .minimizable(false)
-                .always_on_top(true)
-                .skip_taskbar(true)
-                .transparent(true)
-                .shadow(false)
-                .focused(false)
-                .visible(false);
-            match builder.build() {
-                Ok(w) => {
-                    let _ = w.set_position(tauri::PhysicalPosition::new(x, y));
-                }
-                Err(e) => eprintln!("preview failed: {e}"),
-            }
-        });
+    if let Some(w) = app.get_webview_window("preview") {
+        let _ = w.close();
+        std::thread::sleep(std::time::Duration::from_millis(140));
     }
-
-    let app3 = app.clone();
-    std::thread::spawn(move || {
-        std::thread::sleep(std::time::Duration::from_millis(2000));
-        show_preview(&app3);
-    });
-}
-
-fn show_preview(app: &AppHandle) {
-    let pos = app.state::<AppState>().preview_pos.lock().unwrap().take();
-    let Some((x, y)) = pos else { return };
-    let Some(w) = app.get_webview_window("preview") else {
-        return;
-    };
+    let url = format!("index.html?view=preview&id={id}");
+    let app2 = app.clone();
     let _ = app.run_on_main_thread(move || {
-        let _ = w.set_position(tauri::PhysicalPosition::new(x, y));
-        let _ = w.show();
+        let builder = WebviewWindowBuilder::new(&app2, "preview", WebviewUrl::App(url.into()))
+            .title("ColdShot Preview")
+            .inner_size(PREVIEW_W, PREVIEW_H)
+            .decorations(false)
+            .resizable(false)
+            .maximizable(false)
+            .minimizable(false)
+            .always_on_top(true)
+            .skip_taskbar(true)
+            .transparent(true)
+            .shadow(false)
+            .focused(false)
+            .visible(false);
+        match builder.build() {
+            Ok(w) => {
+                let x = mon_x + (PREVIEW_MARGIN * scale).round() as i32;
+                let y = mon_y + mon_h as i32
+                    - ((PREVIEW_H + PREVIEW_MARGIN + TASKBAR_ALLOWANCE) * scale).round() as i32;
+                let _ = w.set_position(tauri::PhysicalPosition::new(x, y));
+                let _ = w.show();
+            }
+            Err(e) => eprintln!("preview failed: {e}"),
+        }
     });
-}
-
-#[tauri::command]
-pub fn preview_ready(app: AppHandle) {
-    show_preview(&app);
 }
 
 pub fn open_editor_window(app: &AppHandle, id: &str, img_w: u32, img_h: u32, scale: f64) {
@@ -464,7 +432,6 @@ pub async fn open_editor(app: AppHandle, id: String) -> Result<(), String> {
         return Err("Invalid id".into());
     }
     let path = files::captures_dir(&app)?.join(format!("{id}.png"));
-    files::wait_for_file(&path);
     let (w, h) = image::image_dimensions(&path).map_err(|e| e.to_string())?;
     let scale = app
         .primary_monitor()

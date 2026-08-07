@@ -1,14 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { listen } from "@tauri-apps/api/event";
 import { Copy, Maximize2, X, Check, History } from "lucide-react";
 import { api } from "../lib/api";
 
 const DISMISS_MS = 5000;
 const TICK_MS = 100;
 
-export default function Preview({ id: firstId }: { id: string }) {
-  const [id, setId] = useState(firstId);
-  const [session, setSession] = useState(0);
+export default function Preview({ id }: { id: string }) {
   const [src, setSrc] = useState("");
   const [copied, setCopied] = useState(false);
   const [leaving, setLeaving] = useState(false);
@@ -18,39 +15,8 @@ export default function Preview({ id: firstId }: { id: string }) {
   useEffect(() => {
     document.documentElement.style.background = "transparent";
     document.body.style.background = "transparent";
-    const un = listen<string>("preview-capture", (e) => {
-      setId(e.payload);
-      setSession((n) => n + 1);
-    });
-    return () => {
-      un.then((f) => f()).catch(() => {});
-    };
-  }, []);
-
-  useEffect(() => {
-    let alive = true;
-    setSrc("");
-    setCopied(false);
-    setLeaving(false);
-    setRemaining(DISMISS_MS);
-    holdRef.current = false;
-    api
-      .loadThumb(id)
-      .then((d) => {
-        if (alive) setSrc(d);
-      })
-      .catch(() => {})
-      .finally(() => {
-        requestAnimationFrame(() =>
-          requestAnimationFrame(() => {
-            api.previewReady().catch(() => {});
-          })
-        );
-      });
-    return () => {
-      alive = false;
-    };
-  }, [id, session]);
+    api.loadThumb(id).catch(() => api.loadCapture(id)).then(setSrc).catch(() => {});
+  }, [id]);
 
   const close = () => {
     setLeaving(true);
@@ -76,7 +42,7 @@ export default function Preview({ id: firstId }: { id: string }) {
       }
     }, TICK_MS);
     return () => window.clearInterval(iv);
-  }, [id, session]);
+  }, []);
 
   const openFull = async () => {
     holdRef.current = true;
