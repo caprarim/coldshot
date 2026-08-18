@@ -17,10 +17,22 @@ fn show_main(app: &tauri::AppHandle) {
     }
 }
 
+fn capture_arg(args: &[String]) -> Option<&'static str> {
+    args.iter().skip(1).find_map(|a| match a.as_str() {
+        "--area" => Some("area"),
+        "--window" => Some("window"),
+        "--full" => Some("full"),
+        _ => None,
+    })
+}
+
 pub fn run() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            show_main(app);
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            match capture_arg(&args) {
+                Some(mode) => capture::begin(app.clone(), mode, 0),
+                None => show_main(app),
+            }
         }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
@@ -65,6 +77,14 @@ pub fn run() {
             }
             if let Err(e) = settings::register_hotkeys(&handle, &loaded, false) {
                 eprintln!("hotkey registration failed: {e}");
+            }
+
+            let argv: Vec<String> = std::env::args().collect();
+            if let Some(mode) = capture_arg(&argv) {
+                if let Some(w) = app.get_webview_window("main") {
+                    let _ = w.hide();
+                }
+                capture::begin(handle.clone(), mode, 250);
             }
 
             let capture_area =
