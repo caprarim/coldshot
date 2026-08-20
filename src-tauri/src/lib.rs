@@ -162,6 +162,11 @@ pub fn run() {
                 _ => {}
             }
         })
-        .run(tauri::generate_context!())
-        .expect("error while running ColdShot");
+        .build(tauri::generate_context!())
+        .expect("error while running ColdShot")
+        .run(|_app, event| {
+            if let tauri::RunEvent::Exit = event {
+                files::release_clipboard();
+            }
+        });
 }

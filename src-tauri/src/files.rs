@@ -6,6 +6,9 @@ use serde::Serialize;
 use std::fs;
 use std::io::Cursor;
 use std::path::PathBuf;
+use std::sync::mpsc::{self, Sender};
+use std::sync::{Mutex, OnceLock};
+use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_dialog::DialogExt;
 
@@ -105,15 +108,80 @@ pub fn store_capture(app: &AppHandle, img: &image::RgbaImage) -> Result<String, 
     Ok(id)
 }
 
-pub fn copy_rgba_to_clipboard(img: &image::RgbaImage) -> Result<(), String> {
-    let mut cb = arboard::Clipboard::new().map_err(|e| e.to_string())?;
-    cb.set_image(arboard::ImageData {
-        width: img.width() as usize,
-        height: img.height() as usize,
-        bytes: std::borrow::Cow::Borrowed(img.as_raw().as_slice()),
+enum ClipboardJob {
+    Set(image::RgbaImage, Sender<Result<(), String>>),
+    Release(Sender<()>),
+}
+
+fn clipboard_jobs() -> Result<&'static Mutex<Sender<ClipboardJob>>, String> {
+    static JOBS: OnceLock<Result<Mutex<Sender<ClipboardJob>>, String>> = OnceLock::new();
+    JOBS.get_or_init(|| {
+        let (jobs_tx, jobs_rx) = mpsc::channel::<ClipboardJob>();
+        let (ready_tx, ready_rx) = mpsc::channel::<Result<(), String>>();
+        std::thread::spawn(move || {
+            let mut cb = match arboard::Clipboard::new() {
+                Ok(cb) => {
+                    let _ = ready_tx.send(Ok(()));
+                    Some(cb)
+                }
+                Err(e) => {
+                    let _ = ready_tx.send(Err(e.to_string()));
+                    return;
+                }
+            };
+            for job in jobs_rx {
+                match job {
+                    ClipboardJob::Set(img, reply) => {
+                        let result = match cb.as_mut() {
+                            Some(cb) => cb
+                                .set_image(arboard::ImageData {
+                                    width: img.width() as usize,
+                                    height: img.height() as usize,
+                                    bytes: std::borrow::Cow::Borrowed(img.as_raw().as_slice()),
+                                })
+                                .map_err(|e| e.to_string()),
+                            None => Err("Clipboard released".to_string()),
+                        };
+                        let _ = reply.send(result);
+                    }
+                    ClipboardJob::Release(reply) => {
+                        drop(cb.take());
+                        let _ = reply.send(());
+                    }
+                }
+            }
+        });
+        match ready_rx.recv() {
+            Ok(Ok(())) => Ok(Mutex::new(jobs_tx)),
+            Ok(Err(e)) => Err(e),
+            Err(e) => Err(e.to_string()),
+        }
     })
-    .map_err(|e| e.to_string())?;
-    Ok(())
+    .as_ref()
+    .map_err(|e| e.clone())
+}
+
+fn send_clipboard_job(job: ClipboardJob) -> Result<(), String> {
+    clipboard_jobs()?
+        .lock()
+        .map_err(|e| e.to_string())?
+        .send(job)
+        .map_err(|e| e.to_string())
+}
+
+pub fn copy_rgba_to_clipboard(img: image::RgbaImage) -> Result<(), String> {
+    let (reply_tx, reply_rx) = mpsc::channel();
+    send_clipboard_job(ClipboardJob::Set(img, reply_tx))?;
+    reply_rx
+        .recv_timeout(Duration::from_secs(5))
+        .map_err(|e| e.to_string())?
+}
+
+pub fn release_clipboard() {
+    let (reply_tx, reply_rx) = mpsc::channel();
+    if send_clipboard_job(ClipboardJob::Release(reply_tx)).is_ok() {
+        let _ = reply_rx.recv_timeout(Duration::from_millis(600));
+    }
 }
 
 fn decode_data_url(data: &str) -> Result<Vec<u8>, String> {
@@ -280,7 +348,7 @@ pub async fn copy_image(data: String) -> Result<(), String> {
     let img = image::load_from_memory(&bytes)
         .map_err(|e| e.to_string())?
         .to_rgba8();
-    copy_rgba_to_clipboard(&img)
+    copy_rgba_to_clipboard(img)
 }
 
 #[tauri::command]

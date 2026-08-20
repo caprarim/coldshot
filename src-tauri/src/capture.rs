@@ -320,7 +320,9 @@ fn finalize_frozen(app: &AppHandle, frozen: Frozen, x: f64, y: f64, w: f64, h: f
                 s.auto_copy
             };
             if auto_copy {
-                let _ = files::copy_rgba_to_clipboard(&cropped);
+                if let Err(e) = files::copy_rgba_to_clipboard(cropped) {
+                    eprintln!("clipboard copy failed: {e}");
+                }
             }
             take_main_hidden(app);
             let _ = app.emit("capture-saved", id.clone());
