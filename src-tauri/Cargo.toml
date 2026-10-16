@@ -1,6 +1,6 @@
 [package]
 name = "coldshot"
-version = "0.6.0"
+version = "0.6.1"
 description = "Fast screenshot capture, annotation and sharing"
 authors = ["Rim"]
 edition = "2021"
@@ -37,5 +37,5 @@ reqwest = { version = "0.13", default-features = false, features = ["rustls"] }
 panic = "abort"
 codegen-units = 1
 lto = true
-opt-level = "s"
+opt-level = 3
 strip = true
