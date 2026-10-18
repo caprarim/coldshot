@@ -1,6 +1,6 @@
 [package]
 name = "coldshot"
-version = "0.6.1"
+version = "0.6.2"
 description = "Fast screenshot capture, annotation and sharing"
 authors = ["Rim"]
 edition = "2021"
@@ -27,6 +27,7 @@ chrono = "0.4"
 
 [target.'cfg(windows)'.dependencies]
 arboard = "3"
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_LibraryLoader", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_WindowsAndMessaging"] }
 reqwest = { version = "0.13", default-features = false, features = ["native-tls"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]

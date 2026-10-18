@@ -3,6 +3,8 @@ mod files;
 mod settings;
 mod state;
 mod update;
+#[cfg(windows)]
+mod winkey;
 
 use state::AppState;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};

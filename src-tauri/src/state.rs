@@ -38,7 +38,12 @@ impl Default for Settings {
         Self {
             save_dir: String::new(),
             auto_copy: true,
-            hotkey_area: "Ctrl+Shift+1".into(),
+            hotkey_area: if cfg!(windows) {
+                "Win+Shift+S"
+            } else {
+                "Ctrl+Shift+1"
+            }
+            .into(),
             hotkey_window: "Ctrl+Shift+2".into(),
             hotkey_full: "Ctrl+Shift+3".into(),
         }

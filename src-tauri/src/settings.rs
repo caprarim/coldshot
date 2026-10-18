@@ -186,8 +186,13 @@ pub fn register_hotkeys(app: &AppHandle, s: &Settings, strict: bool) -> Result<(
     let gs = app.global_shortcut();
     let _ = gs.unregister_all();
     let mut failed: Vec<String> = Vec::new();
-    for (_, shortcut, mode) in planned {
+    let mut win_shift_s: Option<String> = None;
+    for (normalized, shortcut, mode) in planned {
         let mode = mode.to_string();
+        if cfg!(windows) && normalized == "shift+super+KeyS" {
+            win_shift_s = Some(mode);
+            continue;
+        }
         if let Err(e) = gs.on_shortcut(shortcut, move |app, _sc, event| {
             if event.state() == ShortcutState::Pressed {
                 capture::begin(app.clone(), &mode, 0);
@@ -196,6 +201,10 @@ pub fn register_hotkeys(app: &AppHandle, s: &Settings, strict: bool) -> Result<(
             failed.push(format!("{e}"));
         }
     }
+    #[cfg(windows)]
+    crate::winkey::set(app, win_shift_s);
+    #[cfg(not(windows))]
+    let _ = win_shift_s;
     if !failed.is_empty() {
         let msg = format!(
             "Another app is already using that hotkey ({}).",

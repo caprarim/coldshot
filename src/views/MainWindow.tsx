@@ -449,7 +449,7 @@ export default function MainWindow() {
                 </div>
               ))}
               <p className="text-xs text-zinc-500">
-                Examples: Ctrl+Shift+1, Ctrl+Alt+A, F9
+                Examples: Win+Shift+S, Ctrl+Shift+1, Ctrl+Alt+A, F9
               </p>
             </div>
             <button

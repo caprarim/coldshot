@@ -51,7 +51,7 @@ sudo apt install gnome-shell-extension-appindicator
 - Pin screenshots as floating always-on-top windows (drag to move, scroll to resize, double click to close)
 - Capture history with thumbnails (edit, copy, pin, reveal, delete)
 - Copy to clipboard, quick save, save as dialog
-- Global hotkeys (defaults: Ctrl+Shift+1 area, Ctrl+Shift+2 window, Ctrl+Shift+3 full screen), editable in Settings
+- Global hotkeys (defaults: Win+Shift+S area on Windows, Ctrl+Shift+1 on Linux, Ctrl+Shift+2 window, Ctrl+Shift+3 full screen), editable in Settings
 - System tray app: closing the main window keeps it running in the tray
 - Update tab: checks for a new version, downloads the installer with a progress bar, installs silently and reopens ColdShot
 

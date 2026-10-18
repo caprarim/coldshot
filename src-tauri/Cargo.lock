@@ -735,7 +735,7 @@ dependencies = [
 
 [[package]]
 name = "coldshot"
-version = "0.6.1"
+version = "0.6.2"
 dependencies = [
  "arboard",
  "base64 0.22.1",
@@ -750,6 +750,7 @@ dependencies = [
  "tauri-plugin-global-shortcut",
  "tauri-plugin-opener",
  "tauri-plugin-single-instance",
+ "windows-sys 0.61.2",
  "xcap",
 ]
 
